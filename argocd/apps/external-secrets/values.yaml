@@ -1,0 +1,2 @@
+# ClusterSecretStore + ExternalSecrets live in helm/charts/secret-stores (app: secret-stores)
+installCRDs: true

@@ -1,0 +1,15 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended"],
+  "dependencyDashboard": true,
+  "argocd": {
+    "managerFilePatterns": ["/argocd/apps/.+/application\\.yaml$/"]
+  },
+  "packageRules": [
+    {
+      "matchManagers": ["argocd"],
+      "groupName": "{{depName}} chart",
+      "addLabels": ["area/dependency"]
+    }
+  ]
+}

@@ -42,3 +42,19 @@ terraform.rc
 # Optional: ignore plan files saved before destroying Terraform configuration
 # Uncomment the line below if you want to ignore planout files.
 # planout
+# Kubeconfigs / talosconfigs
+*.kubeconfig
+kubeconfig
+talosconfig
+
+# Helm dependency charts (downloaded via `helm dependency update`)
+**/charts/*.tgz
+**/Chart.lock
+
+# Vault init output — unseal keys and root token must never be committed
+vault-init*.json
+
+.DS_Store
+
+# RKE2 node configs with the real token filled in
+cluster/rke2/*.local.yaml

@@ -1,0 +1,24 @@
+---
+# App-of-apps: picks up every argocd/apps/*/application.yaml.
+# Applied once by hand during bootstrap (`make bootstrap`); everything else is GitOps.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: root
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/jimdaga/dagalab-infra.git
+    targetRevision: main
+    path: argocd/apps
+    directory:
+      recurse: true
+      include: '*/application.yaml'
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true

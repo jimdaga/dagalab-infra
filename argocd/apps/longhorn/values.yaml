@@ -1,0 +1,11 @@
+# Node prereqs (iscsid, nfs-utils, multipath blacklist) are handled by cluster/rke2/node-prep.sh.
+persistence:
+  defaultClass: true
+  defaultClassReplicaCount: 3
+
+defaultSettings:
+  defaultDataPath: /var/lib/longhorn
+
+# Required when deployed via Argo CD (the pre-upgrade hook job breaks sync)
+preUpgradeChecker:
+  jobEnabled: false

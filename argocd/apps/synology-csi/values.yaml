@@ -1,0 +1,41 @@
+# Synology DSM as a second storage backend next to Longhorn (Longhorn stays the default class).
+# DSM connection details come from Vault (secret/synology) via helm/charts/secret-stores.
+# Node prereqs (iscsid, nfs-utils) are already handled by cluster/rke2/node-prep.sh.
+clientInfoSecret:
+  create: false
+  name: synology-csi-client-info
+
+storageClasses:
+  iscsi-delete:
+    reclaimPolicy: Delete
+    volumeBindingMode: WaitForFirstConsumer
+    test: false
+  iscsi-retain:
+    reclaimPolicy: Retain
+    volumeBindingMode: WaitForFirstConsumer
+  # RWX volumes; needs NFS (v4.1) enabled in DSM
+  nfs-delete:
+    mountOptions:
+      - vers=4.1
+    parameters:
+      protocol: nfs
+    reclaimPolicy: Delete
+    test: false
+  nfs-retain:
+    mountOptions:
+      - vers=4.1
+    parameters:
+      protocol: nfs
+    reclaimPolicy: Retain
+  # SMB needs a separate SMB user secret; not used here
+  smb-delete:
+    disabled: true
+  smb-retain:
+    disabled: true
+
+# Snapshot CRDs + snapshot-controller are bundled with RKE2
+volumeSnapshotClasses:
+  delete:
+    deletionPolicy: Delete
+  retain:
+    deletionPolicy: Retain

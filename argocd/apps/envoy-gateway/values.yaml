@@ -1,0 +1,2 @@
+# Gateway API CRDs are installed by this chart.
+# GatewayClass / Gateway / routes live in helm/charts/shared-gateway (app: shared-gateway)

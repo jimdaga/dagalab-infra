@@ -1,0 +1,56 @@
+# HA Vault with integrated (raft) storage on Longhorn PVCs, auto-unsealed by AWS KMS.
+# KMS key + IAM user come from terraform/aws-vault-unseal. The only hand-made secret in the
+# cluster is `vault-aws-kms` (that IAM user's access key). Run `vault operator init` once (see README).
+injector:
+  enabled: false # secrets reach workloads via external-secrets instead
+
+ui:
+  enabled: true
+
+server:
+  dataStorage:
+    enabled: true
+    size: 10Gi
+    storageClass: longhorn
+  auditStorage:
+    enabled: true
+    size: 5Gi
+    storageClass: longhorn
+  extraSecretEnvironmentVars:
+    - envName: AWS_ACCESS_KEY_ID
+      secretName: vault-aws-kms
+      secretKey: AWS_ACCESS_KEY_ID
+    - envName: AWS_SECRET_ACCESS_KEY
+      secretName: vault-aws-kms
+      secretKey: AWS_SECRET_ACCESS_KEY
+
+  ha:
+    enabled: true
+    replicas: 3
+    raft:
+      enabled: true
+      setNodeId: true
+      config: |
+        ui = true
+        listener "tcp" {
+          tls_disable = 1
+          address = "[::]:8200"
+          cluster_address = "[::]:8201"
+        }
+        storage "raft" {
+          path = "/vault/data"
+          retry_join {
+            leader_api_addr = "http://vault-0.vault-internal:8200"
+          }
+          retry_join {
+            leader_api_addr = "http://vault-1.vault-internal:8200"
+          }
+          retry_join {
+            leader_api_addr = "http://vault-2.vault-internal:8200"
+          }
+        }
+        seal "awskms" {
+          region     = "us-east-1"
+          kms_key_id = "alias/dagalab-vault-unseal"
+        }
+        service_registration "kubernetes" {}

@@ -1,0 +1,9 @@
+crds:
+  enabled: true
+  keep: true
+
+# ClusterIssuers live in helm/charts/cluster-issuers (app: cluster-issuers)
+# Use public resolvers for DNS-01 self-checks so split-horizon DNS doesn't get in the way
+extraArgs:
+  - --dns01-recursive-nameservers-only
+  - --dns01-recursive-nameservers=1.1.1.1:53,9.9.9.9:53

@@ -1,0 +1,31 @@
+domain: jimdaga.dev
+
+gatewayClass:
+  name: envoy
+
+gateway:
+  name: shared
+  # Fixed IP from the MetalLB pool (see README "Network")
+  loadBalancerIP: 192.168.2.200
+
+certificate:
+  issuer: letsencrypt-staging # flip to letsencrypt-prod once DNS-01 works
+
+# HTTPRoutes for platform UIs: <host>.<domain> -> service:port in namespace
+routes:
+  - host: argocd
+    namespace: argocd
+    service: argocd-server
+    port: 80
+  - host: vault
+    namespace: vault
+    service: vault-ui
+    port: 8200
+  - host: grafana
+    namespace: monitoring
+    service: kube-prometheus-stack-grafana
+    port: 80
+  - host: longhorn
+    namespace: longhorn-system
+    service: longhorn-frontend
+    port: 80

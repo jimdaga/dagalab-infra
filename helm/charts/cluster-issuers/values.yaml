@@ -1,0 +1,13 @@
+email: jdagostino2@gmail.com
+
+# Secret must exist in the cert-manager namespace (synced from Vault by helm/charts/secret-stores)
+cloudflare:
+  apiTokenSecret:
+    name: cloudflare-api-token
+    key: api-token
+
+issuers:
+  - name: letsencrypt-staging
+    server: https://acme-staging-v02.api.letsencrypt.org/directory
+  - name: letsencrypt-prod
+    server: https://acme-v02.api.letsencrypt.org/directory

@@ -1,0 +1,19 @@
+# Publishes LAN IPs (192.168.2.x) for *.jimdaga.dev into Cloudflare (DNS-only, not proxied).
+provider:
+  name: cloudflare
+
+env:
+  - name: CF_API_TOKEN
+    valueFrom:
+      secretKeyRef:
+        name: cloudflare-api-token # synced from Vault by helm/charts/secret-stores
+        key: api-token
+
+policy: sync
+txtOwnerId: dagalab
+domainFilters:
+  - jimdaga.dev
+
+sources:
+  - service
+  - gateway-httproute

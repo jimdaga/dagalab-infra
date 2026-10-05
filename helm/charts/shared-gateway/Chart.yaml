@@ -1,0 +1,5 @@
+apiVersion: v2
+name: shared-gateway
+description: Shared Envoy Gateway, wildcard certificate, and HTTPRoutes for platform UIs
+type: application
+version: 0.1.0

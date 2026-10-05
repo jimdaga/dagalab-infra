@@ -1,0 +1,32 @@
+# /etc/rancher/rke2/config.yaml on lab-2 (192.168.2.12) and lab-3 (192.168.2.13).
+# Same as server-init.yaml plus `server:`; set node-ip per node.
+token: "<shared-cluster-token>" # generate once: openssl rand -hex 32; do NOT commit the real value
+node-ip: 192.168.2.12 # lab-3: 192.168.2.13
+server: https://192.168.2.11:9345
+tls-san:
+  - 192.168.2.10       # reserved for a future kube-vip API VIP
+  - k8s.jimdaga.dev
+write-kubeconfig-mode: "0600"
+
+# Bundled components we replace with Argo CD-managed apps (envoy-gateway).
+# rke2-metrics-server and rke2-snapshot-controller stay enabled.
+disable:
+  - rke2-ingress-nginx
+
+cni: canal
+
+# RHEL runs SELinux enforcing; the RPM install pulls in rke2-selinux
+selinux: true
+
+# etcd snapshots (local); TODO: ship to S3/NAS
+etcd-snapshot-schedule-cron: "0 */6 * * *"
+etcd-snapshot-retention: 20
+
+# Expose control-plane metrics for kube-prometheus-stack
+etcd-expose-metrics: true
+kube-controller-manager-arg:
+  - bind-address=0.0.0.0
+kube-scheduler-arg:
+  - bind-address=0.0.0.0
+kube-proxy-arg:
+  - metrics-bind-address=0.0.0.0:10249

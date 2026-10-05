@@ -1,0 +1,5 @@
+apiVersion: v2
+name: secret-stores
+description: Vault ClusterSecretStore and the ExternalSecrets platform apps depend on
+type: application
+version: 0.1.0

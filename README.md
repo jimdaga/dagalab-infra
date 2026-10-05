@@ -1,0 +1,105 @@
+# dagalab-infra
+
+GitOps config for the dagalab homelab: a 3-node RKE2 cluster on RHEL 9 managed by Argo CD (app-of-apps, mostly upstream Helm charts). Domain: `jimdaga.dev`.
+
+## Layout
+
+```
+dagalab-infra/
+├── cluster/rke2/                  # RKE2 node configs + install notes
+├── terraform/aws-vault-unseal/    # AWS KMS key + IAM user for Vault auto-unseal
+├── argocd/
+│   ├── bootstrap/root-app.yaml    # App-of-apps, applied once by hand
+│   └── apps/{app}/
+│       ├── application.yaml       # Argo CD Application (chart + version + sync wave)
+│       └── values.yaml            # Helm values (upstream-chart apps only)
+├── helm/charts/                   # Local charts for glue config (issuers, gateway, IP pools, secret stores)
+├── scripts/vault-bootstrap.sh     # One-time Vault config after init
+├── Makefile
+└── renovate.json                  # Bumps chart versions in application.yaml
+```
+
+Upstream-chart apps use a multi-source Application: source 1 is the chart, source 2 is this repo (`ref: values`), so values come from `$values/argocd/apps/{app}/values.yaml`. Local-chart apps point straight at `helm/charts/{app}`.
+
+## Network
+
+Lab VLAN 2 on the UniFi Cloud Gateway Ultra: `192.168.2.0/24`.
+
+| Range | Use |
+|-------|-----|
+| 192.168.2.1 | Gateway |
+| 192.168.2.10 | Reserved: Kubernetes API VIP (future kube-vip) |
+| 192.168.2.11–13 | lab-1..3 (DHCP reservations) |
+| 192.168.2.100–199 | UniFi DHCP pool |
+| 192.168.2.200–229 | MetalLB pool. **Must be outside the DHCP pool.** |
+| 192.168.2.200 | Shared gateway (`*.jimdaga.dev`) |
+
+external-dns publishes `<app>.jimdaga.dev → 192.168.2.200` to Cloudflare (DNS-only), so names resolve anywhere but only work on the LAN/VPN.
+
+## Stack
+
+| Wave | App | What |
+|-----:|-----|------|
+| -30 | argocd | Argo CD, self-managed |
+| -20 | metallb | LoadBalancer IPs on bare metal |
+| -20 | longhorn | Replicated block storage (default StorageClass) |
+| -20 | cert-manager | Certificates |
+| -20 | envoy-gateway | Gateway API implementation (ingress-nginx replacement) + Gateway API CRDs |
+| -15 | metallb-config | IP pool / L2 advertisement |
+| -10 | vault | HA Vault, raft on Longhorn, AWS KMS auto-unseal |
+| -10 | external-secrets | Syncs Vault secrets into k8s Secrets |
+| -5 | secret-stores | Vault ClusterSecretStore + ExternalSecrets (Cloudflare token, Grafana admin) |
+| 0 | cluster-issuers | Let's Encrypt staging + prod via Cloudflare DNS-01 |
+| 0 | external-dns | DNS records from HTTPRoutes/Services → Cloudflare |
+| 0 | kube-prometheus-stack | Prometheus, Alertmanager, Grafana |
+| 0 | synology-csi | Synology DSM storage classes: iSCSI (RWO) and NFS (RWX), Delete/Retain |
+| 5 | shared-gateway | GatewayClass, shared Gateway, wildcard cert, HTTPRoutes for UIs |
+
+metrics-server is bundled by RKE2, so it isn't listed here. RKE2's bundled ingress-nginx is disabled.
+
+Sync waves between child apps work because `argocd/apps/argocd/values.yaml` restores the Application health check. Vault stays unhealthy until it's initialized, which **intentionally holds every later wave** until you run the Vault steps below.
+
+### Why Envoy Gateway
+
+ingress-nginx was retired in March 2026, and Gateway API is where things are headed. Envoy Gateway is a CNCF, Gateway-API-native implementation that doesn't depend on which CNI you run.
+
+## Storage
+
+| StorageClass | Backend | Access | Use for |
+|---|---|---|---|
+| `longhorn` (default) | Node disks, 3 replicas | RWO | Most apps, Vault, Prometheus |
+| `synology-csi-iscsi-delete` / `-retain` | Synology iSCSI LUN | RWO | Big volumes you want on the NAS |
+| `synology-csi-nfs-delete` / `-retain` | Synology NFS share | RWX | Shared/media volumes |
+
+Synology prep (DSM):
+- Create a dedicated CSI user in the `administrators` group, with 2FA off for that user.
+- Enable iSCSI, and NFS v4.1 for the NFS classes.
+- Give DSM a certificate valid for the hostname you store in Vault (`SYNOLOGY_HOST`).
+- Ideally put the NAS on VLAN 2 (or give it a VLAN 2 interface), so storage traffic doesn't get routed through the gateway.
+
+## Bootstrap
+
+1. **AWS:** `cd terraform/aws-vault-unseal && terraform init && terraform apply`, then create an access key out of band so it stays out of state:
+   `aws iam create-access-key --user-name dagalab-vault-unseal`
+2. **Cluster:** follow `cluster/rke2/README.md`.
+3. **Vault's AWS creds:** the only hand-made secret:
+   ```bash
+   kubectl create ns vault
+   kubectl -n vault create secret generic vault-aws-kms \
+     --from-literal=AWS_ACCESS_KEY_ID=... --from-literal=AWS_SECRET_ACCESS_KEY=...
+   ```
+4. **Argo CD:** `make bootstrap`. Waves -30 through -10 roll out, then Vault waits to be initialized.
+5. **Vault:**
+   ```bash
+   kubectl -n vault exec -ti vault-0 -- vault operator init   # recovery keys + root token → password manager, NOT git
+   VAULT_TOKEN=... CF_API_TOKEN=... GRAFANA_ADMIN_PASSWORD=... \
+   SYNOLOGY_HOST=... SYNOLOGY_USERNAME=... SYNOLOGY_PASSWORD=... ./scripts/vault-bootstrap.sh
+   ```
+   vault-1/2 join raft and auto-unseal on their own. The remaining waves then sync.
+6. Once the staging cert issues, flip `certificate.issuer` in `helm/charts/shared-gateway/values.yaml` to `letsencrypt-prod`.
+
+## TODO
+
+- [ ] kube-vip for an HA API endpoint (192.168.2.10)
+- [ ] Backups: Longhorn → S3/NAS, Vault raft snapshots, RKE2 etcd snapshots off-node
+- [ ] Remote Terraform state

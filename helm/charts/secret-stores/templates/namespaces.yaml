@@ -1,0 +1,15 @@
+# Target namespaces may belong to apps in later sync waves, so create them here.
+# Never prune/delete: the owning app's workloads live in them too.
+{{- $namespaces := list }}
+{{- range .Values.externalSecrets }}
+{{- $namespaces = append $namespaces .namespace }}
+{{- end }}
+{{- range $namespaces | uniq }}
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{ . }}
+  annotations:
+    argocd.argoproj.io/sync-options: Prune=false,Delete=false
+{{- end }}
