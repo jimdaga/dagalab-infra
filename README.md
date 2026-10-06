@@ -31,12 +31,32 @@ Lab VLAN 3 on the UniFi Cloud Gateway Ultra: `192.168.3.0/24`.
 | 192.168.3.1 | Gateway |
 | 192.168.3.10 | Reserved: Kubernetes API VIP (future kube-vip) |
 | 192.168.3.11–13 | lab-1..3 (DHCP reservations) |
-| 192.168.3.100 | bastion: Raspberry Pi, Ubuntu (`ssh jim@192.168.3.100`) |
+| 192.168.3.100 | `bastion.lab.jimdaga.dev`: Raspberry Pi, Ubuntu, static IP (`bastion/`) |
 | 192.168.3.100–199 | UniFi DHCP pool. UniFi defaults a new network to .6–.254, so shrink it to this range. |
 | 192.168.3.200–229 | MetalLB pool. **Must be outside the DHCP pool.** |
 | 192.168.3.200 | Shared gateway (`*.jimdaga.dev`) |
 
 external-dns publishes `<app>.jimdaga.dev → 192.168.3.200` to Cloudflare (DNS-only), so names resolve anywhere but only work on the LAN/VPN.
+
+### Switching
+
+Lab devices hang off an unmanaged switch on the Cloud Gateway Ultra's **Port 3**: Native VLAN = **Lab (3)**, Tagged VLAN Management = **Block All**. Everything behind it lands on VLAN 3 untagged, so devices need no VLAN config.
+
+If a device on Port 3 can't reach 192.168.3.1, run `sudo tcpdump -eni eth0 -c 10 arp` on it. Frames showing `802.1Q … vlan 3` mean the port is sending tagged traffic despite the UI. Flip the native VLAN to Default, apply, then set it back to Lab (3) to re-provision the port.
+
+### DNS
+
+Two zones, two owners:
+
+| Names | Answered by | How records get there |
+|-------|-------------|-----------------------|
+| `<host>.lab.jimdaga.dev` (machines) | UniFi gateway (192.168.3.1) | DHCP clients register automatically; static hosts (bastion) need a manual UniFi DNS record |
+| `<app>.jimdaga.dev` (cluster apps) | Cloudflare | external-dns |
+
+- VLAN 3 network settings in UniFi: set **Domain Name** to `lab.jimdaga.dev`, so DHCP clients get it as their search domain and it's appended to their registered names.
+- Keep the UniFi domain as the `lab.` subdomain. If the gateway owned bare `jimdaga.dev`, it would shadow the public app records.
+- **Prerequisite:** `jimdaga.dev` is currently on IONOS nameservers (`ui-dns.*`). Move the domain's nameservers to Cloudflare before external-dns or cert-manager DNS-01 will work.
+
 
 ## Stack
 
