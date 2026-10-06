@@ -1,4 +1,4 @@
-# Publishes LAN IPs (192.168.2.x) for *.jimdaga.dev into Cloudflare (DNS-only, not proxied).
+# Publishes LAN IPs (192.168.3.x) for *.jimdaga.dev into Cloudflare (DNS-only, not proxied).
 provider:
   name: cloudflare
 

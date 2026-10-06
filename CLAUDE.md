@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-GitOps repo for a 3-node homelab RKE2 cluster on RHEL 9 (SELinux enforcing) (jimdaga.dev, lab VLAN 192.168.2.0/24). Argo CD app-of-apps; see README.md for layout, network plan and bootstrap.
+GitOps repo for a 3-node homelab RKE2 cluster on RHEL 9 (SELinux enforcing) (jimdaga.dev, lab VLAN 192.168.3.0/24). Argo CD app-of-apps; see README.md for layout, network plan and bootstrap.
 
 ## Conventions
 
@@ -12,7 +12,7 @@ GitOps repo for a 3-node homelab RKE2 cluster on RHEL 9 (SELinux enforcing) (jim
 - No rendering step. Files are applied as written.
 - Secrets live in Vault and reach workloads via ExternalSecrets in `helm/charts/secret-stores`. The only hand-made secret is `vault/vault-aws-kms`. Anything consuming a Vault-sourced secret must sync at a later wave than `secret-stores`.
 - Never commit secrets, Vault init output, RKE2 tokens, or kubeconfigs.
-- No hardware yet: don't run commands against a cluster or AWS unless asked.
+- Bastion (Raspberry Pi, Ubuntu) is up at `jim@192.168.3.100` with a clone of this repo; set up by `bastion/setup.sh`. Cluster nodes aren't built yet, so don't run commands against a cluster or AWS unless asked.
 
 ## Validation
 

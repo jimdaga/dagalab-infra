@@ -4,13 +4,13 @@ Three identical RHEL 9 nodes, all servers (HA etcd, workloads scheduled on all t
 
 | Node  | IP           |
 |-------|--------------|
-| lab-1 | 192.168.2.11 |
-| lab-2 | 192.168.2.12 |
-| lab-3 | 192.168.2.13 |
+| lab-1 | 192.168.3.11 |
+| lab-2 | 192.168.3.12 |
+| lab-3 | 192.168.3.13 |
 
 ## Node prep (each node)
 
-1. Install RHEL 9 (minimal), register it, set the hostname, and give it a UniFi DHCP reservation on VLAN 2.
+1. Install RHEL 9 (minimal), register it, set the hostname, and give it a UniFi DHCP reservation on VLAN 3.
 2. Make sure each node has a dedicated disk or a large `/var/lib/longhorn` for Longhorn.
 3. Run `sudo ./node-prep.sh`. It:
    - installs Longhorn's prerequisites (iscsid, nfs-utils, cryptsetup) and adds a multipath blacklist
@@ -38,4 +38,4 @@ curl -sfL https://get.rke2.io | sudo INSTALL_RKE2_VERSION=$RKE2_VERSION sh -
 sudo systemctl enable --now rke2-server
 ```
 
-Kubeconfig: `/etc/rancher/rke2/rke2.yaml` on lab-1. Copy it locally and change `server:` to `https://192.168.2.11:6443`.
+Kubeconfig: `/etc/rancher/rke2/rke2.yaml` on lab-1. Copy it locally and change `server:` to `https://192.168.3.11:6443`.

@@ -6,6 +6,7 @@ GitOps config for the dagalab homelab: a 3-node RKE2 cluster on RHEL 9 managed b
 
 ```
 dagalab-infra/
+├── bastion/                       # Admin Pi setup (CLI tooling)
 ├── cluster/rke2/                  # RKE2 node configs + install notes
 ├── terraform/aws-vault-unseal/    # AWS KMS key + IAM user for Vault auto-unseal
 ├── argocd/
@@ -23,18 +24,19 @@ Upstream-chart apps use a multi-source Application: source 1 is the chart, sourc
 
 ## Network
 
-Lab VLAN 2 on the UniFi Cloud Gateway Ultra: `192.168.2.0/24`.
+Lab VLAN 3 on the UniFi Cloud Gateway Ultra: `192.168.3.0/24`.
 
 | Range | Use |
 |-------|-----|
-| 192.168.2.1 | Gateway |
-| 192.168.2.10 | Reserved: Kubernetes API VIP (future kube-vip) |
-| 192.168.2.11–13 | lab-1..3 (DHCP reservations) |
-| 192.168.2.100–199 | UniFi DHCP pool |
-| 192.168.2.200–229 | MetalLB pool. **Must be outside the DHCP pool.** |
-| 192.168.2.200 | Shared gateway (`*.jimdaga.dev`) |
+| 192.168.3.1 | Gateway |
+| 192.168.3.10 | Reserved: Kubernetes API VIP (future kube-vip) |
+| 192.168.3.11–13 | lab-1..3 (DHCP reservations) |
+| 192.168.3.100 | bastion: Raspberry Pi, Ubuntu (`ssh jim@192.168.3.100`) |
+| 192.168.3.100–199 | UniFi DHCP pool. UniFi defaults a new network to .6–.254, so shrink it to this range. |
+| 192.168.3.200–229 | MetalLB pool. **Must be outside the DHCP pool.** |
+| 192.168.3.200 | Shared gateway (`*.jimdaga.dev`) |
 
-external-dns publishes `<app>.jimdaga.dev → 192.168.2.200` to Cloudflare (DNS-only), so names resolve anywhere but only work on the LAN/VPN.
+external-dns publishes `<app>.jimdaga.dev → 192.168.3.200` to Cloudflare (DNS-only), so names resolve anywhere but only work on the LAN/VPN.
 
 ## Stack
 
@@ -75,7 +77,7 @@ Synology prep (DSM):
 - Create a dedicated CSI user in the `administrators` group, with 2FA off for that user.
 - Enable iSCSI, and NFS v4.1 for the NFS classes.
 - Give DSM a certificate valid for the hostname you store in Vault (`SYNOLOGY_HOST`).
-- Ideally put the NAS on VLAN 2 (or give it a VLAN 2 interface), so storage traffic doesn't get routed through the gateway.
+- Ideally put the NAS on VLAN 3 (or give it a VLAN 3 interface), so storage traffic doesn't get routed through the gateway.
 
 ## Bootstrap
 
@@ -100,6 +102,6 @@ Synology prep (DSM):
 
 ## TODO
 
-- [ ] kube-vip for an HA API endpoint (192.168.2.10)
+- [ ] kube-vip for an HA API endpoint (192.168.3.10)
 - [ ] Backups: Longhorn → S3/NAS, Vault raft snapshots, RKE2 etcd snapshots off-node
 - [ ] Remote Terraform state

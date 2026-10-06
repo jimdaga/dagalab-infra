@@ -6,7 +6,7 @@ gatewayClass:
 gateway:
   name: shared
   # Fixed IP from the MetalLB pool (see README "Network")
-  loadBalancerIP: 192.168.2.200
+  loadBalancerIP: 192.168.3.200
 
 certificate:
   issuer: letsencrypt-staging # flip to letsencrypt-prod once DNS-01 works
