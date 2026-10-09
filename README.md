@@ -72,11 +72,12 @@ Two zones, two owners:
 | -15 | metallb-config | IP pool / L2 advertisement |
 | -10 | vault | HA Vault, raft on Longhorn, AWS KMS auto-unseal |
 | -10 | external-secrets | Syncs Vault secrets into k8s Secrets |
-| -5 | secret-stores | Vault ClusterSecretStore + ExternalSecrets (Cloudflare token, Grafana admin) |
+| -5 | secret-stores | Vault ClusterSecretStore + ExternalSecrets (Cloudflare token, Grafana admin, PIA) |
 | 0 | cluster-issuers | Let's Encrypt staging + prod via Cloudflare DNS-01 |
 | 0 | external-dns | DNS records from HTTPRoutes/Services → Cloudflare |
 | 0 | kube-prometheus-stack | Prometheus, Alertmanager, Grafana |
 | 0 | synology-csi | Synology DSM storage classes: iSCSI (RWO) and NFS (RWX), Delete/Retain |
+| 0 | qbittorrent | qBittorrent behind a Gluetun sidecar (PIA OpenVPN, port forwarding); NFS share on daga-nas |
 | 5 | shared-gateway | GatewayClass, shared Gateway, wildcard cert, HTTPRoutes for UIs |
 
 metrics-server is bundled by RKE2, so it isn't listed here. RKE2's bundled ingress-nginx is disabled.

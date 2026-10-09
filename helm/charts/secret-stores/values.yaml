@@ -32,6 +32,15 @@ externalSecrets:
       - secretKey: admin-password
         key: grafana
         property: admin-password
+  - name: pia
+    namespace: media
+    data:
+      - secretKey: OPENVPN_USER
+        key: pia
+        property: username
+      - secretKey: OPENVPN_PASSWORD
+        key: pia
+        property: password
   - name: synology-csi-client-info
     namespace: synology-csi
     enabled: false   # TODO: enable after seeding Vault (scripts/vault-bootstrap.sh)

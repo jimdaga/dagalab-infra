@@ -1,0 +1,88 @@
+# qBittorrent behind a Gluetun sidecar (PIA OpenVPN + port forwarding).
+# Gluetun's firewall is the kill switch: nothing leaves the pod except through the tunnel.
+# UI: kubectl -n media port-forward svc/qbittorrent 8080
+controllers:
+  qbittorrent:
+    strategy: Recreate
+    pod:
+      # Resolve through Gluetun's DNS inside the tunnel; cluster DNS is blocked by its firewall anyway.
+      dnsPolicy: None
+      dnsConfig:
+        nameservers:
+          - 127.0.0.1
+    initContainers:
+      gluetun:
+        image:
+          repository: qmcgaw/gluetun
+          tag: v3.41.3
+        # Native sidecar: starts (and connects) before qBittorrent, keeps running alongside it
+        restartPolicy: Always
+        env:
+          VPN_SERVICE_PROVIDER: private internet access
+          VPN_TYPE: openvpn
+          # PIA only offers port forwarding outside the US
+          SERVER_REGIONS: CA Toronto,CA Montreal
+          PORT_FORWARD_ONLY: "on"
+          VPN_PORT_FORWARDING: "on"
+          # Push the forwarded port into qBittorrent whenever PIA assigns or renews it.
+          # Needs "Bypass authentication for clients on localhost" in qBittorrent's Web UI settings.
+          # app-template runs values through tpl, so Gluetun's {{PORTS}} placeholder is escaped.
+          VPN_PORT_FORWARDING_UP_COMMAND: >-
+            /bin/sh -c 'wget -O- --retry-connrefused --post-data
+            "json={\"listen_port\":{{ "{{PORTS}}" }}}"
+            http://127.0.0.1:8080/api/v2/app/setPreferences 2>&1'
+          # Let the Web UI through the firewall (port-forward / Service traffic)
+          FIREWALL_INPUT_PORTS: "8080"
+          TZ: America/New_York
+        envFrom:
+          - secretRef:
+              name: pia   # OPENVPN_USER / OPENVPN_PASSWORD, from secret-stores
+        securityContext:
+          capabilities:
+            add:
+              - NET_ADMIN
+    containers:
+      app:
+        image:
+          repository: lscr.io/linuxserver/qbittorrent
+          tag: 5.2.4
+        env:
+          WEBUI_PORT: "8080"
+          TZ: America/New_York
+          # TODO: match the owner of the NAS share (DSM user/group IDs)
+          PUID: "1026"
+          PGID: "100"
+
+service:
+  app:
+    controller: qbittorrent
+    ports:
+      http:
+        port: 8080
+
+persistence:
+  config:
+    type: persistentVolumeClaim
+    accessMode: ReadWriteOnce
+    size: 2Gi
+    advancedMounts:
+      qbittorrent:
+        app:
+          - path: /config
+  tun:
+    type: hostPath
+    hostPath: /dev/net/tun
+    advancedMounts:
+      qbittorrent:
+        gluetun:
+          - path: /dev/net/tun
+  # One share for downloads and media so the *arr apps can hardlink on import.
+  # Mounted by name; after the NAS re-IP only the DNS record changes (restart the pod to remount).
+  data:
+    type: nfs
+    server: daga-nas.lab.internal
+    path: /volume1/data   # TODO: create the share + NFS rule for 192.168.3.0/24 once the RAID repair finishes
+    advancedMounts:
+      qbittorrent:
+        app:
+          - path: /data

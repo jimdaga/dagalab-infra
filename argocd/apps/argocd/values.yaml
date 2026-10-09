@@ -30,6 +30,12 @@ configs:
       type: helm
       url: docker.io/envoyproxy
       enableOCI: "true"
+    # bjw-s app-template, for apps without an upstream chart
+    bjw-s:
+      name: bjw-s
+      type: helm
+      url: ghcr.io/bjw-s-labs/helm
+      enableOCI: "true"
 
 dex:
   enabled: false
