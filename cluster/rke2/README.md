@@ -4,9 +4,9 @@ Three identical bare-metal nodes (8 cores, 30 GB RAM, 512 GB SSD, Ubuntu 26.04 L
 
 | Node | IP | NIC |
 |------|----|-----|
-| dagakube01.lab.net | 192.168.3.11 | eno1 |
-| dagakube02.lab.net | 192.168.3.12 | eno1 |
-| dagakube03.lab.net | 192.168.3.13 | eno1 |
+| dagakube01.lab.internal | 192.168.3.11 | eno1 |
+| dagakube02.lab.internal | 192.168.3.12 | eno1 |
+| dagakube03.lab.internal | 192.168.3.13 | eno1 |
 
 ## Node prep (each node)
 

@@ -5,7 +5,7 @@ node-ip: 192.168.3.12 # dagakube03: 192.168.3.13
 server: https://192.168.3.11:9345
 tls-san:
   - 192.168.3.10       # reserved for a future kube-vip API VIP
-  - k8s.lab.net
+  - k8s.lab.internal
 write-kubeconfig-mode: "0600"
 
 # Bundled components we replace with Argo CD-managed apps (envoy-gateway).

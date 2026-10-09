@@ -45,17 +45,24 @@ if ! command -v dig >/dev/null; then
   fi
 fi
 
-# Completions + aliases
+# Completions: generated once into bash-completion's per-command dir, so they load lazily on first
+# <Tab> instead of on every login (running kubectl/helm/argocd at login cost ~4s on the Pi).
+export PATH="$HOME/.local/share/mise/shims:$PATH"   # non-interactive: mise tools via shims
+COMP_DIR=~/.local/share/bash-completion/completions
+mkdir -p "$COMP_DIR"
+kubectl completion bash > "$COMP_DIR/kubectl"
+helm completion bash    > "$COMP_DIR/helm"
+argocd completion bash  > "$COMP_DIR/argocd"
+yq shell-completion bash > "$COMP_DIR/yq"
+# `k` alias: bash-completion looks up completions/k when you tab after `k`
+printf '%s\n' ". $COMP_DIR/kubectl" 'complete -o default -F __start_kubectl k' > "$COMP_DIR/k"
+
+# Login-time shell config stays cheap: aliases + `complete -C` hooks only
 mkdir -p ~/.bashrc.d
 cat > ~/.bashrc.d/k8s.sh <<'RC'
-source <(kubectl completion bash)
-source <(helm completion bash)
-source <(argocd completion bash)
-source <(yq shell-completion bash)
+alias k=kubectl
 complete -C "$(command -v vault)" vault
 complete -C "$(command -v aws_completer)" aws
-alias k=kubectl
-complete -o default -F __start_kubectl k
 RC
 grep -q 'bashrc.d/k8s.sh' ~/.bashrc || echo '[ -f ~/.bashrc.d/k8s.sh ] && . ~/.bashrc.d/k8s.sh' >> ~/.bashrc
 

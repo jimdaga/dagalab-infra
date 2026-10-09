@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-GitOps repo for a 3-node homelab RKE2 cluster on Ubuntu 26.04 bare metal (dagakube01–03.lab.net = 192.168.3.11–13; apps on jimdaga.dev; lab VLAN 192.168.3.0/24). Argo CD app-of-apps; see README.md for layout, network plan and bootstrap.
+GitOps repo for a 3-node homelab RKE2 cluster on Ubuntu 26.04 bare metal (dagakube01–03.lab.internal = 192.168.3.11–13; apps on jimdaga.dev; lab VLAN 192.168.3.0/24). Argo CD app-of-apps; see README.md for layout, network plan and bootstrap.
 
 ## Conventions
 

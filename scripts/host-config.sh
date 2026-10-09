@@ -13,7 +13,7 @@ set -euo pipefail
 
 HOST=$1
 IP=$2
-DOMAIN=${DOMAIN:-lab.net}
+DOMAIN=${DOMAIN:-lab.internal}
 GATEWAY=${GATEWAY:-192.168.3.1}
 PREFIX=${PREFIX:-24}
 ROLLBACK_SECS=${ROLLBACK_SECS:-180}
