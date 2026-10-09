@@ -117,6 +117,7 @@ Synology prep (DSM):
    kubectl -n vault exec -ti vault-0 -- vault operator init   # recovery keys + root token → password manager, NOT git
    VAULT_TOKEN=... CF_API_TOKEN=... GRAFANA_ADMIN_PASSWORD=... \
    SYNOLOGY_HOST=... SYNOLOGY_USERNAME=... SYNOLOGY_PASSWORD=... ./scripts/vault-bootstrap.sh
+   # Every secret is optional and re-runnable; Grafana's password is generated if unset.
    ```
    vault-1/2 join raft and auto-unseal on their own. The remaining waves then sync.
 6. Once the staging cert issues, flip `certificate.issuer` in `helm/charts/shared-gateway/values.yaml` to `letsencrypt-prod`.
