@@ -1,6 +1,6 @@
 # dagalab-infra
 
-GitOps config for the dagalab homelab: a 3-node RKE2 cluster on RHEL 9 managed by Argo CD (app-of-apps, mostly upstream Helm charts). Domain: `jimdaga.dev`.
+GitOps config for the dagalab homelab: a 3-node RKE2 cluster on Ubuntu 26.04 managed by Argo CD (app-of-apps, mostly upstream Helm charts). Apps live on `jimdaga.dev`; machines on `lab.net`.
 
 ## Layout
 
@@ -29,10 +29,10 @@ Lab VLAN 3 on the UniFi Cloud Gateway Ultra: `192.168.3.0/24`.
 | Range | Use |
 |-------|-----|
 | 192.168.3.1 | Gateway |
-| 192.168.3.10 | Reserved: Kubernetes API VIP (future kube-vip) |
-| 192.168.3.11–13 | lab-1..3 (DHCP reservations) |
-| 192.168.3.100 | `bastion.lab.jimdaga.dev`: Raspberry Pi, Ubuntu, static IP (`bastion/`) |
-| 192.168.3.100–199 | UniFi DHCP pool. UniFi defaults a new network to .6–.254, so shrink it to this range. |
+| 192.168.3.10 | Reserved: Kubernetes API VIP (future kube-vip), `k8s.lab.net` |
+| 192.168.3.11–13 | dagakube01–03.lab.net (static, `scripts/host-config.sh`) |
+| 192.168.3.100 | bastion.lab.net: Raspberry Pi, Ubuntu (static, `scripts/host-config.sh`; tooling in `bastion/`) |
+| 192.168.3.101–199 | UniFi DHCP pool. UniFi defaults a new network to .6–.254, so shrink it to this range. |
 | 192.168.3.200–229 | MetalLB pool. **Must be outside the DHCP pool.** |
 | 192.168.3.200 | Shared gateway (`*.jimdaga.dev`) |
 
@@ -50,11 +50,12 @@ Two zones, two owners:
 
 | Names | Answered by | How records get there |
 |-------|-------------|-----------------------|
-| `<host>.lab.jimdaga.dev` (machines) | UniFi gateway (192.168.3.1) | DHCP clients register automatically; static hosts (bastion) need a manual UniFi DNS record |
+| `<host>.lab.net` (machines) | UniFi gateway (192.168.3.1) | Static hosts (nodes, bastion) need a manual UniFi DNS record; DHCP clients register automatically |
 | `<app>.jimdaga.dev` (cluster apps) | Cloudflare | external-dns |
 
-- VLAN 3 network settings in UniFi: set **Domain Name** to `lab.jimdaga.dev`, so DHCP clients get it as their search domain and it's appended to their registered names.
-- Keep the UniFi domain as the `lab.` subdomain. If the gateway owned bare `jimdaga.dev`, it would shadow the public app records.
+- VLAN 3 network settings in UniFi: set **Domain Name** to `lab.net`, so DHCP clients get it as their search domain and it's appended to their registered names.
+- Local DNS records in UniFi: `k8s`, `dagakube01`–`03`, and `bastion` under `lab.net` (see the Network table).
+- `lab.net` is a real public domain owned by someone else. Anything not answered by the gateway (a typo, or a device on another network or VPN) leaks to *their* DNS. Switching to `lab.internal` (`.internal` is reserved by ICANN for private use) is a one-variable change: `DOMAIN=lab.internal` for `scripts/host-config.sh`.
 - **Prerequisite:** `jimdaga.dev` is currently on IONOS nameservers (`ui-dns.*`). Move the domain's nameservers to Cloudflare before external-dns or cert-manager DNS-01 will work.
 
 

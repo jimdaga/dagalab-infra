@@ -1,6 +1,6 @@
 # Synology DSM as a second storage backend next to Longhorn (Longhorn stays the default class).
 # DSM connection details come from Vault (secret/synology) via helm/charts/secret-stores.
-# Node prereqs (iscsid, nfs-utils) are already handled by cluster/rke2/node-prep.sh.
+# Node prereqs (open-iscsi, nfs-common) are already handled by cluster/rke2/node-prep.sh.
 clientInfoSecret:
   create: false
   name: synology-csi-client-info

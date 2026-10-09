@@ -1,4 +1,4 @@
-# Node prereqs (iscsid, nfs-utils, multipath blacklist) are handled by cluster/rke2/node-prep.sh.
+# Node prereqs (open-iscsi, nfs-common, multipathd off) are handled by cluster/rke2/node-prep.sh.
 persistence:
   defaultClass: true
   defaultClassReplicaCount: 3
