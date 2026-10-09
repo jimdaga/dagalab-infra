@@ -5,17 +5,20 @@ vault:
   role: external-secrets  # created by scripts/vault-bootstrap.sh
 
 # ExternalSecrets: Vault kv key/property -> k8s Secret name/key in namespace.
+# `enabled: false` skips an entry (and its namespace) until its Vault secret exists.
 # Optional `template` renders the target Secret's keys from the fetched values
 # (External Secrets template syntax; Helm leaves values-file strings untouched).
 externalSecrets:
   - name: cloudflare-api-token
     namespace: cert-manager
+    enabled: false   # TODO: enable after seeding Vault (scripts/vault-bootstrap.sh)
     data:
       - secretKey: api-token
         key: cloudflare
         property: api-token
   - name: cloudflare-api-token
     namespace: external-dns
+    enabled: false   # TODO: enable after seeding Vault (scripts/vault-bootstrap.sh)
     data:
       - secretKey: api-token
         key: cloudflare
@@ -31,6 +34,7 @@ externalSecrets:
         property: admin-password
   - name: synology-csi-client-info
     namespace: synology-csi
+    enabled: false   # TODO: enable after seeding Vault (scripts/vault-bootstrap.sh)
     data:
       - secretKey: host
         key: synology

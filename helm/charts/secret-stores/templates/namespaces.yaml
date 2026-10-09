@@ -2,7 +2,9 @@
 # Never prune/delete: the owning app's workloads live in them too.
 {{- $namespaces := list }}
 {{- range .Values.externalSecrets }}
+{{- if ne .enabled false }}
 {{- $namespaces = append $namespaces .namespace }}
+{{- end }}
 {{- end }}
 {{- range $namespaces | uniq }}
 ---

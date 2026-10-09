@@ -2,4 +2,5 @@ pools:
   - name: default
     addresses:
       # Lab VLAN 3 is 192.168.3.0/24; this slice must stay outside the UniFi DHCP range
-      - 192.168.3.200-192.168.3.229
+      - 192.168.3.200-192.168.3.206
+      - 192.168.3.208-192.168.3.229   # .207 is daga-nas (static); TODO: move the NAS out of this range
