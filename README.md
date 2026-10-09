@@ -77,7 +77,7 @@ Two zones, two owners:
 | 0 | external-dns | DNS records from HTTPRoutes/Services → Cloudflare |
 | 0 | kube-prometheus-stack | Prometheus, Alertmanager, Grafana |
 | 0 | synology-csi | Synology DSM storage classes: iSCSI (RWO) and NFS (RWX), Delete/Retain |
-| 0 | qbittorrent | qBittorrent behind a Gluetun sidecar (PIA OpenVPN, port forwarding); NFS share on daga-nas |
+| 0 | qbittorrent | qBittorrent behind a Gluetun sidecar (PIA OpenVPN, port forwarding); downloads in daga-nas's video share |
 | 5 | shared-gateway | GatewayClass, shared Gateway, wildcard cert, HTTPRoutes for UIs |
 
 metrics-server is bundled by RKE2, so it isn't listed here. RKE2's bundled ingress-nginx is disabled.
