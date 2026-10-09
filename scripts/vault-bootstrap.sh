@@ -2,9 +2,11 @@
 # Vault configuration after `vault operator init`. Idempotent; re-run as secrets become available.
 #   - kv-v2 at secret/
 #   - kubernetes auth + read-only role for external-secrets
+#   - userpass auth + an admin user, so the root token can stay in the password manager
 #   - seed the secrets platform apps need; each one is optional and only written when provided
 #
 # Usage: VAULT_TOKEN=<root token> \
+#        [VAULT_ADMIN_USER=<name> VAULT_ADMIN_PASSWORD=<pw>] \
 #        [CF_API_TOKEN=<token>] \
 #        [GRAFANA_ADMIN_PASSWORD=<pw>]   (generated if unset and secret/grafana doesn't exist yet) \
 #        [SYNOLOGY_HOST=<dsm hostname> SYNOLOGY_USERNAME=<csi user> SYNOLOGY_PASSWORD=<pw>] \
@@ -30,6 +32,19 @@ v write auth/kubernetes/role/external-secrets \
   bound_service_account_namespaces=external-secrets \
   policies=external-secrets \
   ttl=1h
+
+v auth list -format=json | grep -q '"userpass/"' || v auth enable userpass
+
+v policy write admin - <<'POLICY'
+path "*" { capabilities = ["create", "read", "update", "patch", "delete", "list", "sudo"] }
+POLICY
+
+if [[ -n "${VAULT_ADMIN_USER:-}" && -n "${VAULT_ADMIN_PASSWORD:-}" ]]; then
+  # Password goes over stdin so it never shows up in a process list.
+  printf '%s' "$VAULT_ADMIN_PASSWORD" | v write "auth/userpass/users/$VAULT_ADMIN_USER" password=- token_policies=admin
+else
+  echo "skip userpass admin: set VAULT_ADMIN_USER and VAULT_ADMIN_PASSWORD" >&2
+fi
 
 if [[ -n "${CF_API_TOKEN:-}" ]]; then
   v kv put secret/cloudflare api-token="$CF_API_TOKEN"

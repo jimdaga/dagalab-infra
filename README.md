@@ -116,7 +116,7 @@ Synology prep (DSM):
 5. **Vault:**
    ```bash
    kubectl -n vault exec -ti vault-0 -- vault operator init   # recovery keys + root token → password manager, NOT git
-   VAULT_TOKEN=... CF_API_TOKEN=... GRAFANA_ADMIN_PASSWORD=... \
+   VAULT_TOKEN=... VAULT_ADMIN_USER=jim VAULT_ADMIN_PASSWORD=... CF_API_TOKEN=... GRAFANA_ADMIN_PASSWORD=... \
    SYNOLOGY_HOST=... SYNOLOGY_USERNAME=... SYNOLOGY_PASSWORD=... ./scripts/vault-bootstrap.sh
    # Every secret is optional and re-runnable; Grafana's password is generated if unset.
    ```
