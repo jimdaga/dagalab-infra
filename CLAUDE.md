@@ -10,7 +10,7 @@ GitOps repo for a 3-node homelab RKE2 cluster on Ubuntu 26.04 bare metal (dagaku
 - Order apps with `argocd.argoproj.io/sync-wave`: CRD/operator apps first, their config after, routes last.
 - Keep all Applications on `project: default`, `automated` with `prune` + `selfHeal`, `CreateNamespace=true`, the standard retry block. Add `ServerSideApply=true` for charts with large CRDs.
 - No rendering step. Files are applied as written.
-- Park an app by renaming its `application.yaml` to `application.yaml.disabled` (root only includes `*/application.yaml`). ExternalSecrets in `helm/charts/secret-stores` take `enabled: false`. Currently parked until Cloudflare/Synology secrets exist: external-dns, synology-csi, shared-gateway.
+- Park an app by renaming its `application.yaml` to `application.yaml.disabled` (root only includes `*/application.yaml`). ExternalSecrets in `helm/charts/secret-stores` take `enabled: false`. Currently parked until Cloudflare/Synology secrets exist: cluster-issuers, external-dns, synology-csi, shared-gateway.
 - Secrets live in Vault and reach workloads via ExternalSecrets in `helm/charts/secret-stores`. The only hand-made secret is `vault/vault-aws-kms`. Anything consuming a Vault-sourced secret must sync at a later wave than `secret-stores`.
 - Never commit secrets, Vault init output, RKE2 tokens, or kubeconfigs.
 - Hosts: bastion (Raspberry Pi) `jim@192.168.3.100`, tooling via `bastion/setup.sh`, sudo needs a password. Nodes `jim@192.168.3.11–13`, passwordless sudo. Identity/static IPs via `scripts/host-config.sh`; node prereqs via `cluster/rke2/node-prep.sh`.
