@@ -25,7 +25,7 @@ Three identical bare-metal nodes (8 cores, 30 GB RAM, 512 GB SSD, Ubuntu 26.04 L
 On Ubuntu, `get.rke2.io` installs the tarball to `/usr/local` and sets up the `rke2-server` systemd unit. The version is pinned in `RKE2_VERSION` below. Bump it deliberately, and keep `.tool-versions` kubectl within one minor version.
 
 ```bash
-RKE2_VERSION=v1.37.1+rke2r1
+RKE2_VERSION=v1.36.5+rke2r1   # stable channel as of 2026-10
 
 # dagakube01
 sudo mkdir -p /etc/rancher/rke2 && sudo cp server-init.yaml /etc/rancher/rke2/config.yaml   # fill in token
@@ -38,4 +38,9 @@ curl -sfL https://get.rke2.io | sudo INSTALL_RKE2_VERSION=$RKE2_VERSION sh -
 sudo systemctl enable --now rke2-server
 ```
 
-The kubeconfig is `/etc/rancher/rke2/rke2.yaml` on dagakube01. Copy it to the bastion and change `server:` to `https://192.168.3.11:6443`.
+The kubeconfig is `/etc/rancher/rke2/rke2.yaml` on dagakube01. On the bastion it lives at `~/.kube/config` (context `dagalab`) with `server: https://k8s.lab.internal:6443`, so moving to the kube-vip VIP later is only a DNS change.
+
+## Notes
+
+- RKE2 1.36+ installs **Traefik** by default. `rke2-traefik` and `rke2-traefik-crd` are disabled because envoy-gateway owns ingress and the Gateway API CRDs. Disabling the CRD chart after it has run leaves its CRDs behind; on a fresh cluster, delete the orphaned `*.traefik.io` / `gateway.networking.k8s.io` CRDs before installing envoy-gateway.
+- Built: 2026-10-09 on v1.36.5+rke2r1, one 3-member etcd.

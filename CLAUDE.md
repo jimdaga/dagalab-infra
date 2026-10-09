@@ -13,7 +13,7 @@ GitOps repo for a 3-node homelab RKE2 cluster on Ubuntu 26.04 bare metal (dagaku
 - Secrets live in Vault and reach workloads via ExternalSecrets in `helm/charts/secret-stores`. The only hand-made secret is `vault/vault-aws-kms`. Anything consuming a Vault-sourced secret must sync at a later wave than `secret-stores`.
 - Never commit secrets, Vault init output, RKE2 tokens, or kubeconfigs.
 - Hosts: bastion (Raspberry Pi) `jim@192.168.3.100`, tooling via `bastion/setup.sh`, sudo needs a password. Nodes `jim@192.168.3.11–13`, passwordless sudo. Identity/static IPs via `scripts/host-config.sh`; node prereqs via `cluster/rke2/node-prep.sh`.
-- RKE2 isn't installed yet. Don't run commands against a cluster or AWS unless asked.
+- RKE2 v1.36.5 is running on all three nodes. kubectl from the bastion: `~/.kube/config`, context `dagalab`, API `k8s.lab.internal:6443`. Argo CD is not bootstrapped yet. Don't change the cluster or AWS unless asked.
 
 ## Validation
 

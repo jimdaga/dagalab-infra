@@ -7,10 +7,12 @@ tls-san:
   - k8s.lab.internal
 write-kubeconfig-mode: "0600"
 
-# Bundled components we replace with Argo CD-managed apps (envoy-gateway).
-# rke2-metrics-server and rke2-snapshot-controller stay enabled.
+# Bundled ingress controllers we replace with Argo CD-managed envoy-gateway.
+# (RKE2 1.36+ defaults to Traefik.) rke2-metrics-server and rke2-snapshot-controller stay enabled.
 disable:
   - rke2-ingress-nginx
+  - rke2-traefik
+  - rke2-traefik-crd     # also ships Gateway API CRDs; envoy-gateway owns those
 
 cni: canal
 
