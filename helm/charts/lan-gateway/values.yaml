@@ -19,6 +19,7 @@ routes:
   - { host: homepage, namespace: homepage,        service: homepage,                      port: 3000 }
   # http: true also serves plain http://<host> (no redirect): TV apps can't install the homelab CA
   - { host: jellyfin, namespace: media,           service: jellyfin,                      port: 8096, http: true }
+  - { host: seerr,    namespace: media,           service: seerr,                         port: 5055 }
   - { host: torrent,  namespace: media,           service: qbittorrent,                   port: 8080 }
   - { host: sonarr,   namespace: media,           service: sonarr,                        port: 8989 }
   - { host: radarr,   namespace: media,           service: radarr,                        port: 7878 }

@@ -1,0 +1,53 @@
+# Seerr: request/discovery UI (successor to Overseerr + Jellyseerr). https://seerr.lab.internal
+# Users sign in with their Jellyfin accounts; approved requests go to Radarr/Sonarr (monitored + searched).
+# First-run (Jellyfin admin, libraries, Radarr/Sonarr) is applied by scripts/seerr-setup.sh.
+controllers:
+  seerr:
+    strategy: Recreate
+    pod:
+      securityContext:
+        runAsUser: 1000    # image's `node` user
+        runAsGroup: 1000
+        fsGroup: 1000
+        fsGroupChangePolicy: OnRootMismatch
+    containers:
+      app:
+        image:
+          repository: ghcr.io/seerr-team/seerr
+          tag: v3.5.0
+        env:
+          TZ: America/New_York
+          LOG_LEVEL: info
+        probes:
+          liveness: &probe
+            enabled: true
+            custom: true
+            spec:
+              httpGet:
+                path: /api/v1/status
+                port: 5055
+              periodSeconds: 30
+              failureThreshold: 5
+          readiness: *probe
+        resources:
+          requests:
+            cpu: 50m
+            memory: 256Mi
+          limits:
+            memory: 1Gi
+
+service:
+  app:
+    controller: seerr
+    ports:
+      http:
+        port: 5055
+
+persistence:
+  # settings.json + SQLite DB: Longhorn
+  config:
+    type: persistentVolumeClaim
+    accessMode: ReadWriteOnce
+    size: 2Gi
+    globalMounts:
+      - path: /app/config

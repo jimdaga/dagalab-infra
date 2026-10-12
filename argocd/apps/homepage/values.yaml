@@ -57,7 +57,7 @@ configMaps:
         layout:
           Media:
             style: row
-            columns: 5
+            columns: 3
           Platform:
             style: row
             columns: 4
@@ -76,6 +76,11 @@ configMaps:
                   key: "{{ "{{HOMEPAGE_VAR_JELLYFIN_KEY}}" }}"
                   enableBlocks: true
                   enableNowPlaying: true
+            - Seerr:
+                href: https://seerr.lab.internal
+                icon: jellyseerr.png
+                description: Requests
+                siteMonitor: http://seerr.media.svc.cluster.local:5055/api/v1/status
             - qBittorrent:
                 href: https://torrent.lab.internal
                 icon: qbittorrent.png

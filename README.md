@@ -83,6 +83,7 @@ Two zones, two owners:
 | -1 | media-storage | Static NFS PV/PVC `media/media-data` → daga-nas `192.168.3.21`, shared by all media apps |
 | 0 | prowlarr | Indexer manager; API key from Vault (`secret/prowlarr`), synced to Radarr/Sonarr |
 | 0 | jellyfin | Media server: library read-only from `media-data`, Quick Sync via the GPU plugin; `https://` and plain `http://jellyfin.lab.internal` |
+| 0 | seerr | Request UI (Jellyfin sign-in) → Radarr/Sonarr; `https://seerr.lab.internal` |
 | 0 | radarr | Movies → `/data/movies`; config on Longhorn, API key from Vault |
 | 0 | sonarr | TV → `/data/tv`; config on Longhorn, API key from Vault |
 | 0 | qbittorrent | qBittorrent behind a Gluetun sidecar (PIA OpenVPN, port forwarding); downloads under `/data` on `media-data` |
@@ -106,6 +107,7 @@ ingress-nginx was retired in March 2026, and Gateway API is where things are hea
 | URL | App |
 |---|---|
 | `jellyfin.lab.internal` | Jellyfin (also plain `http://` for TV apps) |
+| `seerr.lab.internal` | Seerr (requests) |
 | `homepage.lab.internal` | Homepage: dashboard linking everything below (config in `argocd/apps/homepage/values.yaml`) |
 | `torrent.lab.internal` | qBittorrent |
 | `sonarr.lab.internal` / `radarr.lab.internal` / `prowlarr.lab.internal` | *arr apps |
