@@ -1,0 +1,93 @@
+# Recyclarr: syncs TRaSH Guides quality profiles, custom formats (release-group tiers, unwanted formats incl. AV1,
+# Golden Rule) and quality sizes into Sonarr/Radarr. Daily CronJob; config below is the source of truth.
+# Run now: kubectl -n media create job --from=cronjob/recyclarr recyclarr-manual
+# Profiles it owns: Sonarr "WEB-1080p", Radarr "HD Bluray + WEB" (series/movies, Seerr and arr-import.py use these).
+controllers:
+  recyclarr:
+    type: cronjob
+    cronjob:
+      schedule: "30 5 * * *"
+      concurrencyPolicy: Forbid
+      successfulJobsHistory: 1
+      failedJobsHistory: 2
+      backoffLimit: 0
+    containers:
+      app:
+        image:
+          repository: ghcr.io/recyclarr/recyclarr
+          tag: 8.7.3
+        args: ["sync"]
+        env:
+          TZ: America/New_York
+          SONARR_API_KEY:
+            valueFrom:
+              secretKeyRef: {name: sonarr, key: SONARR__AUTH__APIKEY}
+          RADARR_API_KEY:
+            valueFrom:
+              secretKeyRef: {name: radarr, key: RADARR__AUTH__APIKEY}
+        resources:
+          requests:
+            cpu: 50m
+            memory: 128Mi
+          limits:
+            memory: 512Mi
+
+configMaps:
+  config:
+    data:
+      recyclarr.yml: |
+        # yaml-language-server: $schema=https://schemas.recyclarr.dev/v8/config-schema.json
+        # Based on recyclarr/config-templates: sonarr web-1080p, radarr hd-bluray-web.
+        sonarr:
+          sonarr:
+            base_url: http://sonarr.media.svc.cluster.local:8989
+            api_key: !env_var SONARR_API_KEY
+            quality_definition:
+              type: series
+            quality_profiles:
+              - trash_id: 72dae194fc92bf828f32cde7744e51a1  # WEB-1080p
+                reset_unmatched_scores:
+                  enabled: true
+                # TRaSH's WEB-1080p is WEB-only; older shows mostly exist as Blu-ray, so allow that too (WEB preferred).
+                # Upgrades stop once either is reached, so a Blu-ray grab isn't churned for quality alone.
+                upgrade:
+                  allowed: true
+                  until_quality: Bluray-1080p
+                  until_score: 10000
+                qualities:
+                  - name: WEB 1080p
+                    qualities: [WEBDL-1080p, WEBRip-1080p]
+                  - name: Bluray-1080p
+            custom_format_groups:
+              add:
+                - trash_id: 158188097a58d7687dee647e04af0da3  # [Optional] Golden Rule HD
+                - trash_id: 85fae4a2294965b75710ef2989c850eb  # [Streaming Services] HD/UHD boost
+                - trash_id: 59c3af66780d08332fdc64e68297098f  # [Unwanted] Unwanted Formats (AV1, LQ, upscaled, x265 HD...)
+        radarr:
+          radarr:
+            base_url: http://radarr.media.svc.cluster.local:7878
+            api_key: !env_var RADARR_API_KEY
+            quality_definition:
+              type: movie
+            quality_profiles:
+              - trash_id: d1d67249d3890e49bc12e275d989a7e9  # HD Bluray + WEB
+                reset_unmatched_scores:
+                  enabled: true
+            custom_format_groups:
+              add:
+                - trash_id: f8bf8eab4617f12dfdbd16303d8da245  # [Optional] Golden Rule HD
+                - trash_id: a3ac6af01d78e4f21fcb75f601ac96df  # [Unwanted] Unwanted Formats (AV1, LQ, upscaled, BR-DISK...)
+
+persistence:
+  # Recyclarr keeps a cache/state dir under /config; nothing there needs to survive between runs
+  data:
+    type: emptyDir
+    globalMounts:
+      - path: /config
+  config:
+    type: configMap
+    identifier: config
+    globalMounts:
+      - path: /config/recyclarr.yml
+        subPath: recyclarr.yml
+        readOnly: true
