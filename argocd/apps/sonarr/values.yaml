@@ -1,0 +1,60 @@
+# Sonarr: TV manager. Root folder /data/tv; downloads land in /data/downloads (same NFS share, so imports hardlink).
+# UI: kubectl -n media port-forward svc/sonarr 8989
+# API key comes from Vault (secret/sonarr). Runs as DSM user media (1029:100) to match the NAS share.
+controllers:
+  sonarr:
+    strategy: Recreate
+    containers:
+      app:
+        image:
+          repository: lscr.io/linuxserver/sonarr
+          tag: 4.0.20.3014-ls327
+        env:
+          TZ: America/New_York
+          PUID: "1029"
+          PGID: "100"
+          SONARR__AUTH__METHOD: Forms
+          # LAN/cluster/port-forward clients skip login; anything routed in later must log in
+          SONARR__AUTH__REQUIRED: DisabledForLocalAddresses
+        envFrom:
+          - secretRef:
+              name: sonarr   # SONARR__AUTH__APIKEY
+        probes:
+          liveness: &probe
+            enabled: true
+            custom: true
+            spec:
+              httpGet:
+                path: /ping
+                port: 8989
+              periodSeconds: 30
+              failureThreshold: 5
+          readiness: *probe
+        resources:
+          requests:
+            cpu: 100m
+            memory: 512Mi
+          limits:
+            memory: 2Gi
+
+service:
+  app:
+    controller: sonarr
+    ports:
+      http:
+        port: 8989
+
+persistence:
+  # SQLite config DB: Longhorn, never NFS
+  config:
+    type: persistentVolumeClaim
+    accessMode: ReadWriteOnce
+    size: 5Gi
+    globalMounts:
+      - path: /config
+  # Shared media share: library + downloads (helm/charts/media-storage)
+  data:
+    type: persistentVolumeClaim
+    existingClaim: media-data
+    globalMounts:
+      - path: /data

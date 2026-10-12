@@ -1,0 +1,60 @@
+# Radarr: Movie manager. Root folder /data/movies; downloads land in /data/downloads (same NFS share, so imports hardlink).
+# UI: kubectl -n media port-forward svc/radarr 7878
+# API key comes from Vault (secret/radarr). Runs as DSM user media (1029:100) to match the NAS share.
+controllers:
+  radarr:
+    strategy: Recreate
+    containers:
+      app:
+        image:
+          repository: lscr.io/linuxserver/radarr
+          tag: 6.4.4.10685-ls320
+        env:
+          TZ: America/New_York
+          PUID: "1029"
+          PGID: "100"
+          RADARR__AUTH__METHOD: Forms
+          # LAN/cluster/port-forward clients skip login; anything routed in later must log in
+          RADARR__AUTH__REQUIRED: DisabledForLocalAddresses
+        envFrom:
+          - secretRef:
+              name: radarr   # RADARR__AUTH__APIKEY
+        probes:
+          liveness: &probe
+            enabled: true
+            custom: true
+            spec:
+              httpGet:
+                path: /ping
+                port: 7878
+              periodSeconds: 30
+              failureThreshold: 5
+          readiness: *probe
+        resources:
+          requests:
+            cpu: 100m
+            memory: 512Mi
+          limits:
+            memory: 2Gi
+
+service:
+  app:
+    controller: radarr
+    ports:
+      http:
+        port: 7878
+
+persistence:
+  # SQLite config DB: Longhorn, never NFS
+  config:
+    type: persistentVolumeClaim
+    accessMode: ReadWriteOnce
+    size: 5Gi
+    globalMounts:
+      - path: /config
+  # Shared media share: library + downloads (helm/charts/media-storage)
+  data:
+    type: persistentVolumeClaim
+    existingClaim: media-data
+    globalMounts:
+      - path: /data
