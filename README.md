@@ -73,11 +73,12 @@ Two zones, two owners:
 | -15 | metallb-config | IP pool / L2 advertisement |
 | -10 | vault | HA Vault, raft on Longhorn, AWS KMS auto-unseal |
 | -10 | external-secrets | Syncs Vault secrets into k8s Secrets |
-| -5 | secret-stores | Vault ClusterSecretStore + ExternalSecrets (Cloudflare token, Grafana admin, PIA) |
+| -5 | secret-stores | Vault ClusterSecretStore + ExternalSecrets (Cloudflare token, Grafana admin, PIA, *arr API keys) |
 | 0 | cluster-issuers | Let's Encrypt staging + prod via Cloudflare DNS-01 |
 | 0 | external-dns | DNS records from HTTPRoutes/Services → Cloudflare |
 | 0 | kube-prometheus-stack | Prometheus, Alertmanager, Grafana |
 | -1 | media-storage | Static NFS PV/PVC `media/media-data` → daga-nas `192.168.3.21`, shared by all media apps |
+| 0 | prowlarr | Indexer manager; API key from Vault (`secret/prowlarr`), synced to Radarr/Sonarr |
 | 0 | qbittorrent | qBittorrent behind a Gluetun sidecar (PIA OpenVPN, port forwarding); downloads under `/data` on `media-data` |
 | 5 | shared-gateway | GatewayClass, shared Gateway, wildcard cert, HTTPRoutes for UIs |
 
@@ -128,7 +129,7 @@ ingress-nginx was retired in March 2026, and Gateway API is where things are hea
 Deploy order, so Jellyfin scans an already clean, ID-tagged library once:
 
 1. **qBittorrent**: done. Gluetun/PIA sidecar, saves to `/data/downloads/{movies,tv}` (categories set by the *arr apps).
-2. **Prowlarr**: indexers, synced to Radarr/Sonarr.
+2. **Prowlarr**: deployed. Indexers, synced to Radarr/Sonarr. API keys for all *arr apps are generated into Vault by `scripts/vault-bootstrap.sh`.
 3. **Radarr** (`/data/movies`) and **Sonarr** (`/data/tv`): config on Longhorn, `media-data` mounted at `/data`.
    - Set folder naming **before** the first import: Radarr `{Movie CleanTitle} ({Release Year}) [tmdbid-{TmdbId}]`, Sonarr `{Series TitleYear} [tvdbid-{TvdbId}]`.
    - Library-import the existing 202 movies / 21 shows, confirm matches, and let them rename folders + files in that pass.

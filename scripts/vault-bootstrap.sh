@@ -9,6 +9,7 @@
 #        [VAULT_ADMIN_USER=<name> VAULT_ADMIN_PASSWORD=<pw>] \
 #        [CF_API_TOKEN=<token>] \
 #        [GRAFANA_ADMIN_PASSWORD=<pw>]   (generated if unset and secret/grafana doesn't exist yet) \
+#        (also generates an API key per *arr app at secret/<app> if missing)
 #        ./scripts/vault-bootstrap.sh
 set -euo pipefail
 
@@ -57,3 +58,12 @@ elif ! exists grafana; then
   v kv put secret/grafana admin-user=admin admin-password="$(openssl rand -base64 24)"
   echo "generated secret/grafana; read it with: vault kv get secret/grafana" >&2
 fi
+
+# *arr API keys: generated here so Argo-deployed apps start with a known key (PROWLARR__AUTH__APIKEY etc.)
+# and can be wired to each other over their APIs. Never overwritten once present.
+for app in prowlarr radarr sonarr; do
+  if ! exists "$app"; then
+    v kv put "secret/$app" api-key="$(openssl rand -hex 16)" >/dev/null
+    echo "generated secret/$app api-key" >&2
+  fi
+done

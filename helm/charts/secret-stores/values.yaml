@@ -41,3 +41,21 @@ externalSecrets:
       - secretKey: OPENVPN_PASSWORD
         key: pia
         property: password
+  - name: prowlarr
+    namespace: media
+    data:
+      - secretKey: PROWLARR__AUTH__APIKEY   # Servarr env override for config.xml <ApiKey>
+        key: prowlarr
+        property: api-key
+  - name: radarr
+    namespace: media
+    data:
+      - secretKey: RADARR__AUTH__APIKEY   # Servarr env override for config.xml <ApiKey>
+        key: radarr
+        property: api-key
+  - name: sonarr
+    namespace: media
+    data:
+      - secretKey: SONARR__AUTH__APIKEY   # Servarr env override for config.xml <ApiKey>
+        key: sonarr
+        property: api-key
