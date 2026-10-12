@@ -55,6 +55,9 @@ rbac:
         - apiGroups: [metrics.k8s.io]
           resources: [nodes, pods]
           verbs: [get, list]
+        - apiGroups: [networking.k8s.io]   # cluster mode lists Ingresses for discovery (none here; avoids an error per refresh)
+          resources: [ingresses]
+          verbs: [get, list]
   bindings:
     homepage:
       type: ClusterRoleBinding
