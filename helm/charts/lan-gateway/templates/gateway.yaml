@@ -16,7 +16,7 @@ spec:
       port: 80
       allowedRoutes:
         namespaces:
-          from: Same
+          from: All   # only routes with `http: true` attach here (plus the https-redirect)
     - name: https
       protocol: HTTPS
       port: 443

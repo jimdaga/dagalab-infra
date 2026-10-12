@@ -1,0 +1,50 @@
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: intel-gpu-operator
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+  annotations:
+    # Wave -15: operator webhooks need cert-manager (wave -20)
+    argocd.argoproj.io/sync-wave: "-15"
+spec:
+  project: default
+  sources:
+    - repoURL: https://intel.github.io/helm-charts
+      chart: intel-device-plugins-operator
+      targetRevision: "0.37.1"
+      helm:
+        releaseName: intel-gpu-operator
+        valueFiles:
+          - $values/argocd/apps/intel-gpu-operator/values.yaml
+    - repoURL: https://github.com/jimdaga/dagalab-infra.git
+      targetRevision: main
+      ref: values
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: inteldeviceplugins-system
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 3m
+  ignoreDifferences:
+    # cert-manager injects the CA bundle into the operator's webhooks after deploy
+    - group: admissionregistration.k8s.io
+      kind: MutatingWebhookConfiguration
+      jqPathExpressions:
+        - .webhooks[].clientConfig.caBundle
+    - group: admissionregistration.k8s.io
+      kind: ValidatingWebhookConfiguration
+      jqPathExpressions:
+        - .webhooks[].clientConfig.caBundle

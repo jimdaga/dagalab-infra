@@ -57,13 +57,18 @@ configMaps:
         layout:
           Media:
             style: row
-            columns: 4
+            columns: 5
           Platform:
             style: row
             columns: 4
 
       services.yaml: |
         - Media:
+            - Jellyfin:
+                href: https://jellyfin.lab.internal
+                icon: jellyfin.png
+                description: Watch
+                siteMonitor: http://jellyfin.media.svc.cluster.local:8096/health
             - qBittorrent:
                 href: https://torrent.lab.internal
                 icon: qbittorrent.png

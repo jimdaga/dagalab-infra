@@ -1,0 +1,80 @@
+# Jellyfin: media server. https://jellyfin.lab.internal (and plain http:// for TV apps that can't trust the homelab CA).
+# Library is the shared NFS claim, mounted READ-ONLY (Jellyfin keeps metadata/artwork in /config, on Longhorn).
+# Quick Sync: requests one share of the node's Intel UHD 630 via the Intel GPU device plugin.
+controllers:
+  jellyfin:
+    strategy: Recreate
+    pod:
+      securityContext:
+        # DSM user `media`: the NAS squashes root to guest, so root couldn't read the library
+        runAsUser: 1029
+        runAsGroup: 100
+        fsGroup: 100
+        fsGroupChangePolicy: OnRootMismatch
+        # host `render` (991) and `video` (44) groups own /dev/dri/*
+        supplementalGroups: [44, 991]
+    containers:
+      app:
+        image:
+          repository: jellyfin/jellyfin
+          tag: 12.2.20261005-225228
+        env:
+          TZ: America/New_York
+          JELLYFIN_PublishedServerUrl: https://jellyfin.lab.internal
+        probes:
+          liveness: &probe
+            enabled: true
+            custom: true
+            spec:
+              httpGet:
+                path: /health
+                port: 8096
+              periodSeconds: 30
+              failureThreshold: 5
+          readiness: *probe
+          startup:
+            enabled: true
+            custom: true
+            spec:
+              httpGet:
+                path: /health
+                port: 8096
+              periodSeconds: 10
+              failureThreshold: 30   # first start migrates/initialises the DB
+        resources:
+          requests:
+            cpu: 500m
+            memory: 1Gi
+            gpu.intel.com/i915: 1
+          limits:
+            memory: 6Gi
+            gpu.intel.com/i915: 1
+
+service:
+  app:
+    controller: jellyfin
+    ports:
+      http:
+        port: 8096
+
+persistence:
+  # SQLite DB, metadata, artwork: Longhorn, never NFS
+  config:
+    type: persistentVolumeClaim
+    accessMode: ReadWriteOnce
+    size: 20Gi
+    globalMounts:
+      - path: /config
+  # transcodes + image cache: node-local scratch
+  cache:
+    type: emptyDir
+    sizeLimit: 50Gi
+    globalMounts:
+      - path: /cache
+  # shared media share (helm/charts/media-storage), read-only
+  data:
+    type: persistentVolumeClaim
+    existingClaim: media-data
+    globalMounts:
+      - path: /data
+        readOnly: true

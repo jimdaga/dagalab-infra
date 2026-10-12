@@ -1,0 +1,11 @@
+# Advertises each node's Intel iGPU (UHD 630, /dev/dri/renderD128) as gpu.intel.com/i915 so pods
+# (Jellyfin Quick Sync) can request it without running privileged.
+name: intel-gpu
+# up to 4 pods may share one node's GPU
+sharedDevNum: 4
+# Every node has the iGPU, and Node Feature Discovery isn't installed: select all amd64 nodes
+# instead of NFD's intel.feature.node.kubernetes.io/gpu label, and skip the NodeFeatureRule.
+nodeSelector:
+  kubernetes.io/arch: amd64
+  intel.feature.node.kubernetes.io/gpu: null   # remove the chart default (Helm merges maps)
+nodeFeatureRule: false

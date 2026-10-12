@@ -10,6 +10,12 @@ spec:
     - name: {{ $.Values.gateway.name }}
       namespace: {{ $.Release.Namespace }}
       sectionName: https
+    {{- if .http }}
+    # plain HTTP too; this hostname-specific route wins over the catch-all https-redirect
+    - name: {{ $.Values.gateway.name }}
+      namespace: {{ $.Release.Namespace }}
+      sectionName: http
+    {{- end }}
   hostnames:
     - {{ printf "%s.%s" .host $.Values.domain | quote }}
   rules:

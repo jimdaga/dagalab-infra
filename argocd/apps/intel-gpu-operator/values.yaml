@@ -1,0 +1,5 @@
+# Intel device plugins operator: reconciles GpuDevicePlugin CRs (argocd/apps/intel-gpu-plugin).
+# Webhook certs come from cert-manager. Only the GPU controller is enabled.
+manager:
+  devices:
+    gpu: true

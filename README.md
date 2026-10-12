@@ -71,7 +71,9 @@ Two zones, two owners:
 | -20 | longhorn | Replicated block storage (default StorageClass) |
 | -20 | cert-manager | Certificates |
 | -20 | envoy-gateway | Gateway API implementation (ingress-nginx replacement) + Gateway API CRDs |
+| -15 | intel-gpu-operator | Intel device plugins operator (GPU only; webhook certs from cert-manager) |
 | -15 | metallb-config | IP pool / L2 advertisement |
+| -10 | intel-gpu-plugin | Exposes each node's UHD 630 as `gpu.intel.com/i915` (shared ×4) for Quick Sync |
 | -10 | vault | HA Vault, raft on Longhorn, AWS KMS auto-unseal |
 | -10 | external-secrets | Syncs Vault secrets into k8s Secrets |
 | -5 | secret-stores | Vault ClusterSecretStore + ExternalSecrets (Cloudflare token, Grafana admin, PIA, *arr API keys) |
@@ -80,6 +82,7 @@ Two zones, two owners:
 | 0 | kube-prometheus-stack | Prometheus, Alertmanager, Grafana |
 | -1 | media-storage | Static NFS PV/PVC `media/media-data` → daga-nas `192.168.3.21`, shared by all media apps |
 | 0 | prowlarr | Indexer manager; API key from Vault (`secret/prowlarr`), synced to Radarr/Sonarr |
+| 0 | jellyfin | Media server: library read-only from `media-data`, Quick Sync via the GPU plugin; `https://` and plain `http://jellyfin.lab.internal` |
 | 0 | radarr | Movies → `/data/movies`; config on Longhorn, API key from Vault |
 | 0 | sonarr | TV → `/data/tv`; config on Longhorn, API key from Vault |
 | 0 | qbittorrent | qBittorrent behind a Gluetun sidecar (PIA OpenVPN, port forwarding); downloads under `/data` on `media-data` |
@@ -102,6 +105,7 @@ ingress-nginx was retired in March 2026, and Gateway API is where things are hea
 
 | URL | App |
 |---|---|
+| `jellyfin.lab.internal` | Jellyfin (also plain `http://` for TV apps) |
 | `homepage.lab.internal` | Homepage: dashboard linking everything below (config in `argocd/apps/homepage/values.yaml`) |
 | `torrent.lab.internal` | qBittorrent |
 | `sonarr.lab.internal` / `radarr.lab.internal` / `prowlarr.lab.internal` | *arr apps |
