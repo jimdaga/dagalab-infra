@@ -18,6 +18,9 @@ controllers:
           # "DisabledForLocalAddresses" can't work behind the gateway; External = auth handled outside the app.
           # MUST switch to Forms (or put real auth in front) before exposing this via the public shared-gateway.
           SONARR__AUTH__METHOD: External
+          # Override config.xml: info-level logs (debug was the default here) and no usage analytics
+          SONARR__LOG__LEVEL: info
+          SONARR__LOG__ANALYTICSENABLED: "False"
         envFrom:
           - secretRef:
               name: sonarr   # SONARR__AUTH__APIKEY

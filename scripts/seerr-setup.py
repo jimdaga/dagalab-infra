@@ -97,6 +97,14 @@ if main.get('applicationUrl') != 'https://seerr.lab.internal' or main.get('appli
     body.update(applicationUrl='https://seerr.lab.internal', applicationTitle='dagalab')
     st, r = call('POST', '/settings/main', body)
     log(f'main settings: {st} {r if st >= 300 else ""}')
+# Seerr sits behind the LAN gateway (Envoy sets X-Forwarded-For): trust it so Seerr sees real client IPs.
+# Takes effect after a restart (kubectl -n media rollout restart deploy/seerr).
+st, net = call('GET', '/settings/network')
+if not net.get('trustProxy'):
+    st, r = call('POST', '/settings/network', dict(net, trustProxy=True))
+    log(f'network settings (trust proxy): {st} {r if st >= 300 else ""} (restart Seerr to apply)')
+else:
+    log('network settings (trust proxy): already set')
 if not initialized:
     st, r = call('POST', '/settings/initialize')
     log(f'initialize: {st} {r if st >= 300 else ""}')

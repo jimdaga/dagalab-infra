@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Idempotently wire Radarr/Sonarr/Prowlarr over their APIs (via local port-forwards).
-Env: RADARR_KEY, SONARR_KEY, PROWLARR_KEY. Ports: radarr 17878, sonarr 18989, prowlarr 19696, qbittorrent 18080 on localhost."""
+Env: RADARR_KEY, SONARR_KEY, PROWLARR_KEY, JELLYFIN_KEY (Jellyfin API key "arr"). Ports: radarr 17878, sonarr 18989, prowlarr 19696, qbittorrent 18080 on localhost."""
 import json, os, sys, urllib.parse, urllib.request, urllib.error
 
 SVC = 'media.svc.cluster.local'
@@ -12,15 +12,16 @@ PROWLARR = dict(url='http://127.0.0.1:19696/api/v1', key=os.environ['PROWLARR_KE
 QBT = 'http://127.0.0.1:18080/api/v2'   # port-forwarded: arrives from localhost, so no login needed...
 QBT_HOST = '127.0.0.1:8080'             # ...as long as the Host header names qBittorrent's own port (else 401)
 
-# Seeding goals per private tracker, so nothing lands on a hit-and-run list. qBittorrent stops a torrent when
+# Per private tracker: seeding goals, so nothing lands on a hit-and-run list, and Prowlarr priority (lower wins
+# ties between equally good releases; TorrentLeech has the better releases and swarms). qBittorrent stops a torrent when
 # EITHER limit is hit, matching the trackers' "ratio OR time" rules; Sonarr/Radarr then remove it (data stays
 # in the library: imports are hardlinks). Keyed by Prowlarr definition name; trackers = announce hostnames.
 #   TorrentLeech: 1:1 or 10 days -> 1.5 / 14 days.  wigornot: ratio 10 or 1 year (its feed's minimumratio/seedtime).
-SEED = {
-    'torrentleech': dict(ratio=1.5, minutes=14 * 24 * 60,  trackers=('torrentleech.org', 'tleechreload.org')),
-    'wigornot':     dict(ratio=10,  minutes=365 * 24 * 60, trackers=('wigornot.com',)),
+TRACKERS = {
+    'torrentleech': dict(ratio=1.5, minutes=14 * 24 * 60,  priority=10, trackers=('torrentleech.org', 'tleechreload.org')),
+    'wigornot':     dict(ratio=10,  minutes=365 * 24 * 60, priority=25, trackers=('wigornot.com',)),
 }
-# Seed everything that's finished: only downloads are queued (3 at a time); no cap on active seeding,
+# qBittorrent: seed everything that's finished: only downloads are queued (3 at a time); no cap on active seeding,
 # no global stop (torrents without a per-tracker goal seed indefinitely). Stop (not remove) at a goal so the *arr apps clean up.
 # Stalled downloads must keep counting toward the 3: private trackers cap concurrent downloads per account
 # (TorrentLeech answers "torrents limit reached"), so starting every queued torrent at once gets them all refused.
@@ -79,15 +80,17 @@ for name, a in APPS.items():
     else:
         print('   naming: already set')
 
-    # media management: hardlinks on, don't leave empty folders, no recycle bin needed
+    # media management: hardlinks on, don't leave empty folders, no recycle bin needed; import subtitle files that
+    # come with a release (embedded subtitles need nothing: Jellyfin reads them from the mkv)
     st, mm = call(u, k, 'GET', '/config/mediamanagement')
-    mwant = {'copyUsingHardlinks': True, 'deleteEmptyFolders': True, 'createEmptySeriesFolders' if name == 'sonarr' else 'createEmptyMovieFolders': False}
+    mwant = {'copyUsingHardlinks': True, 'deleteEmptyFolders': True, 'createEmptySeriesFolders' if name == 'sonarr' else 'createEmptyMovieFolders': False,
+             'importExtraFiles': True, 'extraFileExtensions': 'srt,ass,ssa,vtt,sub,idx'}
     if any(mm.get(f) != v for f, v in mwant.items()):
         mm.update(mwant)
         st, r = call(u, k, 'PUT', f'/config/mediamanagement/{mm["id"]}', mm)
-        print(f'   media management (hardlinks): updated (HTTP {st})' if st in (200, 202) else f'   media mgmt FAILED {st}: {r}'); ok &= st in (200, 202)
+        print(f'   media management (hardlinks, subtitles): updated (HTTP {st})' if st in (200, 202) else f'   media mgmt FAILED {st}: {r}'); ok &= st in (200, 202)
     else:
-        print('   media management (hardlinks): already set')
+        print('   media management (hardlinks, subtitles): already set')
 
     # qBittorrent download client
     st, dcs = call(u, k, 'GET', '/downloadclient')
@@ -107,6 +110,53 @@ for name, a in APPS.items():
         else:
             st, r = call(u, k, 'POST', '/downloadclient', dc)
             print(f'   download client qBittorrent ({a["cat"]}): test OK, created (HTTP {st})' if st in (200, 201) else f'   create FAILED {st}: {r}'); ok &= st in (200, 201)
+
+    # Jellyfin connection: refresh the library right after imports/upgrades/renames/deletes. Jellyfin can't watch the
+    # NFS share for changes, so without this new files only show up at its 12-hourly scan. Same /data path in both pods.
+    st, conns = call(u, k, 'GET', '/notification')
+    jf = next((c for c in conns if c['implementation'] == 'MediaBrowser'), None)
+    if jf is None:
+        st, schema = call(u, k, 'GET', '/notification/schema')
+        jf = next(c for c in schema if c['implementation'] == 'MediaBrowser')
+    jwant = {'host': f'jellyfin.{SVC}', 'port': 8096, 'useSsl': False, 'apiKey': os.environ['JELLYFIN_KEY'], 'notify': False, 'updateLibrary': True}
+    events = [e for e in ('onDownload', 'onUpgrade', 'onImportComplete', 'onRename', 'onSeriesAdd', 'onSeriesDelete', 'onEpisodeFileDelete',
+                          'onEpisodeFileDeleteForUpgrade', 'onMovieAdded', 'onMovieDelete', 'onMovieFileDelete', 'onMovieFileDeleteForUpgrade')
+              if e in jf and jf.get('supports' + e[0].upper() + e[1:], False)]
+    cur = {f['name']: f.get('value') for f in jf['fields']}
+    if jf.get('id') and all(cur.get(n) == v for n, v in jwant.items()) and all(jf.get(e) for e in events):
+        print('   Jellyfin connection: present')
+    else:
+        jf.update(name='Jellyfin', **{e: True for e in events})
+        for n, v in jwant.items():
+            setf(jf['fields'], n, v)
+        st, r = call(u, k, 'POST', '/notification/test', jf)
+        if st not in (200, 202):
+            print(f'   Jellyfin connection test FAILED {st}: {r}'); ok = False
+        else:
+            st, r = call(u, k, 'PUT' if jf.get('id') else 'POST', f'/notification/{jf["id"]}' if jf.get('id') else '/notification', jf)
+            print(f'   Jellyfin connection: {"updated" if jf.get("id") else "created"} (HTTP {st}; {", ".join(events)})' if st in (200, 201, 202) else f'   Jellyfin connection FAILED {st}: {r}')
+            ok &= st in (200, 201, 202)
+
+    # Never grab AV1: the UHD 630 can't decode it in hardware and many TVs/Apple devices can't direct-play it.
+    # A custom format scored far below every profile's minimum (0) makes such releases rejected outright.
+    st, cfs = call(u, k, 'GET', '/customformat')
+    av1 = next((c for c in cfs if c['name'] == 'AV1'), None)
+    if av1 is None:
+        st, av1 = call(u, k, 'POST', '/customformat', {'name': 'AV1', 'includeCustomFormatWhenRenaming': False, 'specifications': [
+            {'name': 'AV1', 'implementation': 'ReleaseTitleSpecification', 'negate': False, 'required': True,
+             'fields': [{'name': 'value', 'value': r'\bAV1\b'}]}]})
+        print(f'   custom format AV1: created (HTTP {st})' if st in (200, 201) else f'   custom format AV1 FAILED {st}: {av1}'); ok &= st in (200, 201)
+    else:
+        print('   custom format AV1: present')
+    for qp in call(u, k, 'GET', '/qualityprofile')[1]:
+        item = next((f for f in qp['formatItems'] if f['format'] == av1['id']), None)
+        if item and item['score'] == -10000 and qp['minFormatScore'] >= 0:
+            continue
+        if item: item['score'] = -10000
+        else: qp['formatItems'].append({'format': av1['id'], 'name': 'AV1', 'score': -10000})
+        qp['minFormatScore'] = max(qp['minFormatScore'], 0)
+        st, r = call(u, k, 'PUT', f'/qualityprofile/{qp["id"]}', qp)
+        print(f'   profile {qp["name"]}: AV1 scored -10000 (HTTP {st})' if st in (200, 202) else f'   profile {qp["name"]} FAILED {st}: {r}'); ok &= st in (200, 202)
 
 # Prowlarr -> Radarr/Sonarr applications (full sync of indexers)
 p = PROWLARR
@@ -129,21 +179,22 @@ for name, a in APPS.items():
     st, r = call(p['url'], p['key'], 'POST', '/applications', app)
     print(f'   application {impl}: test OK, created (HTTP {st})' if st in (200, 201) else f'   create FAILED {st}: {r}'); ok &= st in (200, 201)
 
-# Prowlarr indexer seed goals (pushed to Radarr/Sonarr, which set per-torrent limits in qBittorrent on grab)
+# Prowlarr indexer seed goals + priority (pushed to Radarr/Sonarr, which set per-torrent limits in qBittorrent on grab)
 st, indexers = call(p['url'], p['key'], 'GET', '/indexer')
 for ix in indexers:
-    goal = SEED.get((ix.get('definitionName') or '').lower())
+    goal = TRACKERS.get((ix.get('definitionName') or '').lower())
     if not goal:
         continue
     want = {'torrentBaseSettings.seedRatio': goal['ratio'], 'torrentBaseSettings.seedTime': goal['minutes'],
             'torrentBaseSettings.packSeedTime': goal['minutes']}
     cur = {f['name']: f.get('value') for f in ix['fields']}
-    if all(cur.get(n) == v for n, v in want.items()):
-        print(f'   seed goal {ix["name"]}: already set'); continue
+    if all(cur.get(n) == v for n, v in want.items()) and ix['priority'] == goal['priority']:
+        print(f'   seed goal + priority {ix["name"]}: already set'); continue
     for n, v in want.items():
         setf(ix['fields'], n, v)
+    ix['priority'] = goal['priority']
     st, r = call(p['url'], p['key'], 'PUT', f'/indexer/{ix["id"]}?forceSave=true', ix)
-    print(f'   seed goal {ix["name"]}: ratio {goal["ratio"]} / {goal["minutes"] // 1440} days (HTTP {st})' if st in (200, 202) else f'   seed goal {ix["name"]} FAILED {st}: {r}')
+    print(f'   seed goal + priority {ix["name"]}: ratio {goal["ratio"]} / {goal["minutes"] // 1440} days, priority {goal["priority"]} (HTTP {st})' if st in (200, 202) else f'   seed goal {ix["name"]} FAILED {st}: {r}')
     ok &= st in (200, 202)
 
 # qBittorrent: preferences + bring torrents grabbed before these goals existed in line with their tracker
@@ -159,7 +210,7 @@ if any(prefs.get(n) != v for n, v in QBT_PREFS.items()):
     print('   preferences (unlimited seeding, 3 downloads): updated')
 else:
     print('   preferences (unlimited seeding, 3 downloads): already set')
-for name, goal in SEED.items():
+for name, goal in TRACKERS.items():
     stale = [t['hash'] for t in qbt('/torrents/info')
              if any(h in (t.get('tracker') or '') for h in goal['trackers'])
              and (t['ratio_limit'] != goal['ratio'] or t['seeding_time_limit'] != goal['minutes'])]

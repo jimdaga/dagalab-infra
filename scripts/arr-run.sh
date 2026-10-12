@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
-# Port-forward Radarr/Sonarr/Prowlarr/qBittorrent, export their API keys from the cluster secrets (never printed), run a script, clean up.
+# Port-forward Radarr/Sonarr/Prowlarr/qBittorrent, export their (and Jellyfin's "arr") API keys from the cluster secrets (never printed), run a script, clean up.
 # usage: scripts/arr-run.sh scripts/arr-wire.py
 set -u
 key() { kubectl -n media get secret "$1" -o jsonpath="{.data.$2}" | base64 -d; }
-export RADARR_KEY=$(key radarr RADARR__AUTH__APIKEY) SONARR_KEY=$(key sonarr SONARR__AUTH__APIKEY) PROWLARR_KEY=$(key prowlarr PROWLARR__AUTH__APIKEY)
+export RADARR_KEY=$(key radarr RADARR__AUTH__APIKEY) SONARR_KEY=$(key sonarr SONARR__AUTH__APIKEY) PROWLARR_KEY=$(key prowlarr PROWLARR__AUTH__APIKEY) \
+  JELLYFIN_KEY=$(key jellyfin-arr JELLYFIN_KEY)
 kubectl -n media port-forward svc/radarr 17878:7878 >/dev/null 2>&1 & p1=$!
 kubectl -n media port-forward svc/sonarr 18989:8989 >/dev/null 2>&1 & p2=$!
 kubectl -n media port-forward svc/prowlarr 19696:9696 >/dev/null 2>&1 & p3=$!
