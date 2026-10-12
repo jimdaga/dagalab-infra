@@ -1,0 +1,80 @@
+# Unpackerr: extracts RAR'd releases (common on TorrentLeech scene uploads) when Sonarr/Radarr report them finished,
+# so they can import; the extracted copy is deleted after import and the original archive keeps seeding.
+# No UI; metrics on :5656/metrics (ServiceMonitor below). Config is env only.
+controllers:
+  unpackerr:
+    strategy: Recreate
+    pod:
+      securityContext:
+        # DSM user `media` (uid 1029, group users=100), same as the other media apps
+        runAsUser: 1029
+        runAsGroup: 100
+        fsGroup: 100
+    containers:
+      app:
+        image:
+          repository: golift/unpackerr
+          tag: 0.16.1
+        env:
+          TZ: America/New_York
+          UN_INTERVAL: 2m
+          UN_START_DELAY: 1m
+          UN_PARALLEL: "1"          # one extraction at a time: they're IO-heavy on the NAS
+          UN_FILE_MODE: "0664"
+          UN_DIR_MODE: "0775"
+          UN_WEBSERVER_METRICS: "true"
+          UN_WEBSERVER_LISTEN_ADDR: 0.0.0.0:5656
+          UN_SONARR_0_URL: http://sonarr.media.svc.cluster.local:8989
+          UN_SONARR_0_API_KEY:
+            valueFrom:
+              secretKeyRef: {name: sonarr, key: SONARR__AUTH__APIKEY}
+          UN_SONARR_0_PATHS_0: /data/downloads/tv
+          UN_SONARR_0_PROTOCOLS: torrent
+          UN_SONARR_0_DELETE_ORIG: "false"   # never: the archive is what's seeding
+          UN_RADARR_0_URL: http://radarr.media.svc.cluster.local:7878
+          UN_RADARR_0_API_KEY:
+            valueFrom:
+              secretKeyRef: {name: radarr, key: RADARR__AUTH__APIKEY}
+          UN_RADARR_0_PATHS_0: /data/downloads/movies
+          UN_RADARR_0_PROTOCOLS: torrent
+          UN_RADARR_0_DELETE_ORIG: "false"
+        probes:
+          liveness: &probe
+            enabled: true
+            custom: true
+            spec:
+              httpGet:
+                path: /metrics
+                port: 5656
+              periodSeconds: 60
+          readiness: *probe
+        resources:
+          requests:
+            cpu: 20m
+            memory: 64Mi
+          limits:
+            memory: 512Mi
+
+service:
+  app:
+    controller: unpackerr
+    ports:
+      metrics:
+        port: 5656
+
+serviceMonitor:
+  app:
+    service:
+      identifier: app
+    endpoints:
+      - port: metrics
+        path: /metrics
+        interval: 1m
+
+persistence:
+  # Same /data mount as Sonarr/Radarr so the paths they report match
+  data:
+    type: persistentVolumeClaim
+    existingClaim: media-data
+    globalMounts:
+      - path: /data
