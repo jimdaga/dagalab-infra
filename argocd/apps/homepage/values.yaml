@@ -265,6 +265,10 @@ configMaps:
             - daga-nas (DSM):
                 - icon: synology-dsm.png
                   href: https://192.168.3.20:5001
+        - Personal:
+            - Proton Mail:
+                - icon: proton-mail.png
+                  href: https://mail.proton.me/
 
       widgets.yaml: |
         - kubernetes:
