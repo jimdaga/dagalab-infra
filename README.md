@@ -167,7 +167,7 @@ Deploy order, so Jellyfin scans an already clean, ID-tagged library once:
    - Set folder naming **before** the first import: Radarr `{Movie CleanTitle} ({Release Year}) [tmdbid-{TmdbId}]`, Sonarr `{Series TitleYear} [tvdbid-{TvdbId}]`.
    - Existing library imported 2026-10-12 with `scripts/arr-import.py` (plan → add → rescan → rename): 196 movies, 23 shows, all **unmonitored** (importing never downloads; monitor titles individually). Folders/files renamed to the ID format.
    - Settings → Connect → Jellyfin (library refresh on import).
-4. **Jellyfin**:
+4. **Jellyfin**: deployed. First-run, Quick Sync, libraries and API keys are applied by `scripts/jellyfin-setup.sh` (admin + keys in Vault `secret/jellyfin`). Jellyfin 12 only accepts `Authorization: MediaBrowser Token=...` (no `X-Emby-Token`/`api_key`).
    - Config/metadata on Longhorn (SQLite: never NFS). `media-data` mounted **read-only**. Transcode dir on node-local `emptyDir`.
    - **Hardware transcoding**: every node is an i7-9700 with UHD 630 (Quick Sync, `i915`, `/dev/dri/renderD128`, `render` GID 991): H.264 + HEVC 8/10-bit, no AV1. Deploy Intel's GPU device plugin (`gpu.intel.com/i915`, shared) so Jellyfin can schedule on any node.
    - **Local only for now**: `https://jellyfin.lab.internal` through the LAN gateway (192.168.3.201; add a route in `helm/charts/lan-gateway/values.yaml`). TVs on the main LAN won't auto-discover across VLANs; enter the server URL once per client. TV apps can't install the homelab CA, so Jellyfin will likely also need a plain-HTTP route (decide when deploying it).

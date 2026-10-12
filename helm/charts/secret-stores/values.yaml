@@ -71,3 +71,6 @@ externalSecrets:
       - secretKey: HOMEPAGE_VAR_PROWLARR_KEY   # read-only use by Homepage widgets
         key: prowlarr
         property: api-key
+      - secretKey: HOMEPAGE_VAR_JELLYFIN_KEY   # Jellyfin API key "homepage" (scripts/jellyfin-setup.sh)
+        key: jellyfin
+        property: homepage-key

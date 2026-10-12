@@ -69,6 +69,13 @@ configMaps:
                 icon: jellyfin.png
                 description: Watch
                 siteMonitor: http://jellyfin.media.svc.cluster.local:8096/health
+                widget:
+                  type: jellyfin
+                  version: 2   # Jellyfin 10.11+/12 only accept "Authorization: MediaBrowser Token=..."
+                  url: http://jellyfin.media.svc.cluster.local:8096
+                  key: "{{ "{{HOMEPAGE_VAR_JELLYFIN_KEY}}" }}"
+                  enableBlocks: true
+                  enableNowPlaying: true
             - qBittorrent:
                 href: https://torrent.lab.internal
                 icon: qbittorrent.png
