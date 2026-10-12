@@ -1,5 +1,5 @@
 apiVersion: v2
 name: media-storage
-description: Static NFS volume on daga-nas shared by the media apps (torrent client, Plex, *arr)
+description: Static NFS volume on daga-nas shared by the media apps (torrent client, Jellyfin, *arr)
 type: application
 version: 0.1.0

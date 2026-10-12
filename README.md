@@ -94,11 +94,11 @@ ingress-nginx was retired in March 2026, and Gateway API is where things are hea
 | Storage | Backend | Access | Use for |
 |---|---|---|---|
 | `longhorn` StorageClass (default) | Node disks, 3 replicas | RWO | App config/databases, Vault, Prometheus |
-| `media/media-data` PVC (`helm/charts/media-storage`) | Static NFS PV → daga-nas `192.168.3.21` | RWX | One shared media share: torrent downloads + library (Plex, *arr apps) |
+| `media/media-data` PVC (`helm/charts/media-storage`) | Static NFS PV → daga-nas `192.168.3.21` | RWX | One shared media share: torrent downloads + library (Jellyfin, *arr apps) |
 
 - No Synology CSI driver: the media apps need one existing share (so imports can hardlink), not a new share per PVC.
 - Every media app mounts the same `media-data` claim; the NAS IP and export path live only in `helm/charts/media-storage/values.yaml`.
-- Keep SQLite-backed app config (Plex, *arr) on Longhorn, never on NFS.
+- Keep SQLite-backed app config (Jellyfin, *arr) on Longhorn, never on NFS.
 - DSM: enable NFS (v4.1) and restrict each export to the nodes (192.168.3.11–13), not `*`. The share owner must match the containers' `PUID`/`PGID`.
 
 ## Bootstrap
@@ -123,8 +123,28 @@ ingress-nginx was retired in March 2026, and Gateway API is where things are hea
    vault-1/2 join raft and auto-unseal on their own. The remaining waves then sync.
 6. Once the staging cert issues, flip `certificate.issuer` in `helm/charts/shared-gateway/values.yaml` to `letsencrypt-prod`.
 
+## Media stack plan
+
+Deploy order, so Jellyfin scans an already clean, ID-tagged library once:
+
+1. **qBittorrent**: done. Gluetun/PIA sidecar, saves to `/data/downloads/{movies,tv}` (categories set by the *arr apps).
+2. **Prowlarr**: indexers, synced to Radarr/Sonarr.
+3. **Radarr** (`/data/movies`) and **Sonarr** (`/data/tv`): config on Longhorn, `media-data` mounted at `/data`.
+   - Set folder naming **before** the first import: Radarr `{Movie CleanTitle} ({Release Year}) [tmdbid-{TmdbId}]`, Sonarr `{Series TitleYear} [tvdbid-{TvdbId}]`.
+   - Library-import the existing 202 movies / 21 shows, confirm matches, and let them rename folders + files in that pass.
+   - Settings → Connect → Jellyfin (library refresh on import).
+4. **Jellyfin**:
+   - Config/metadata on Longhorn (SQLite: never NFS). `media-data` mounted **read-only**. Transcode dir on node-local `emptyDir`.
+   - **Hardware transcoding**: every node is an i7-9700 with UHD 630 (Quick Sync, `i915`, `/dev/dri/renderD128`, `render` GID 991): H.264 + HEVC 8/10-bit, no AV1. Deploy Intel's GPU device plugin (`gpu.intel.com/i915`, shared) so Jellyfin can schedule on any node.
+   - **Local only for now**: LoadBalancer Service on a fixed MetalLB IP (**192.168.3.201**). TVs on the main LAN won't auto-discover across VLANs; enter the server URL once per client.
+   - Libraries: Movies (`/data/movies`), Shows (`/data/tv`), Home Videos (`/data/theme-parks`).
+   - Later: `jellyfin.jimdaga.dev` via the shared gateway once the Cloudflare move happens (see TODO).
+
 ## TODO
 
 - [ ] kube-vip for an HA API endpoint (192.168.3.10)
 - [ ] Backups: Longhorn → S3/NAS, Vault raft snapshots, RKE2 etcd snapshots off-node
 - [ ] Remote Terraform state
+- [ ] Move `jimdaga.dev` DNS from IONOS to Cloudflare **after the NFL season** (the pick'em web app lives on that domain); then unpark cluster-issuers, external-dns, shared-gateway and expose `jellyfin.jimdaga.dev`
+- [ ] Jellyseerr (request UI for Jellyfin), optional
+- [ ] Optional: stop `media` renaming the DSM-denied folders (remove "Delete subfolders and files" at the `video` root, re-grant per media folder)
