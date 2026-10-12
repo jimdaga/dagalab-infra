@@ -79,6 +79,8 @@ Two zones, two owners:
 | 0 | kube-prometheus-stack | Prometheus, Alertmanager, Grafana |
 | -1 | media-storage | Static NFS PV/PVC `media/media-data` → daga-nas `192.168.3.21`, shared by all media apps |
 | 0 | prowlarr | Indexer manager; API key from Vault (`secret/prowlarr`), synced to Radarr/Sonarr |
+| 0 | radarr | Movies → `/data/movies`; config on Longhorn, API key from Vault |
+| 0 | sonarr | TV → `/data/tv`; config on Longhorn, API key from Vault |
 | 0 | qbittorrent | qBittorrent behind a Gluetun sidecar (PIA OpenVPN, port forwarding); downloads under `/data` on `media-data` |
 | 5 | shared-gateway | GatewayClass, shared Gateway, wildcard cert, HTTPRoutes for UIs |
 
@@ -130,7 +132,9 @@ Deploy order, so Jellyfin scans an already clean, ID-tagged library once:
 
 1. **qBittorrent**: done. Gluetun/PIA sidecar, saves to `/data/downloads/{movies,tv}` (categories set by the *arr apps).
 2. **Prowlarr**: deployed. Indexers, synced to Radarr/Sonarr. API keys for all *arr apps are generated into Vault by `scripts/vault-bootstrap.sh`.
-3. **Radarr** (`/data/movies`) and **Sonarr** (`/data/tv`): config on Longhorn, `media-data` mounted at `/data`.
+3. **Radarr** (`/data/movies`) and **Sonarr** (`/data/tv`): deployed; config on Longhorn, `media-data` mounted at `/data`. Hardlinks verified across `downloads/` ↔ library.
+   - App settings that live in their databases (root folders, naming, hardlinks, qBittorrent client + categories, Prowlarr app sync) are applied idempotently by `scripts/arr-run.sh scripts/arr-wire.py`; rerun after a rebuild.
+   - qBittorrent: auth bypass for the pod network (10.42.0.0/16), automatic torrent management, categories `movies`/`tv` → `/data/downloads/{movies,tv}`.
    - Set folder naming **before** the first import: Radarr `{Movie CleanTitle} ({Release Year}) [tmdbid-{TmdbId}]`, Sonarr `{Series TitleYear} [tvdbid-{TvdbId}]`.
    - Library-import the existing 202 movies / 21 shows, confirm matches, and let them rename folders + files in that pass.
    - Settings → Connect → Jellyfin (library refresh on import).
