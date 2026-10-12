@@ -1,10 +1,14 @@
 #!/usr/bin/env python3
-"""Lay out Homarr's "dagalab" board (run by scripts/homarr-setup.sh after onboarding; safe to re-run).
+"""Lay out Homarr's boards and header tabs (run by scripts/homarr-setup.sh after onboarding; safe to re-run).
 
-Env: HOMARR_USER/HOMARR_PASSWORD (to read the board), HOMARR_API_KEY (REST), CA_FILE.
-Keeps the widgets onboarding created (their integrations and ids), drops broken/unconfigured items, adds launcher
-tiles (incl. Homepage's bookmarks), sets icons/weather/clock, and rewrites the layout in rows by purpose:
-  launch bar (clock, weather, media apps) / watching / library / downloads / platform + bookmark launchers.
+Env: HOMARR_USER/HOMARR_PASSWORD (to read boards and set the header), HOMARR_API_KEY (REST), CA_FILE.
+Four boards, pinned as tabs in the header (centre zone) of HOMARR_USER:
+  Home      clock, weather, media launchers, now playing, recently added, requests
+  Library   calendar, missing/queued, request stats, subtitles
+  Downloads qBittorrent, VPN, indexers
+  Platform  launchers for the platform UIs (incl. Homarr's Kubernetes pages) and Homepage's bookmarks
+Widgets keep the integrations onboarding created (taken from whichever board currently has that widget kind).
+The onboarding board "dagalab" is renamed to Home, so it stays the user's home board.
 """
 import http.client, json, os, random, socket, ssl, string, sys, urllib.parse
 
@@ -13,6 +17,7 @@ _g = socket.getaddrinfo
 socket.getaddrinfo = lambda h, *a, **k: _g('192.168.3.201' if h == HOST else h, *a, **k)
 CTX = ssl.create_default_context(cafile=os.environ['CA_FILE'])
 ICONS = 'https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons'
+BOARDS = ['Home', 'Library', 'Downloads', 'Platform']   # tab order
 cookies = {}
 
 def log(*a): print(*a, file=sys.stderr, flush=True)
@@ -32,23 +37,38 @@ def request(method, path, body=None, form=None, api=False):
     try: return r.status, (json.loads(raw) if raw else None)
     except ValueError: return r.status, raw.decode(errors='replace')[:400]
 
+def ok(st, r, what):
+    if st not in (200, 201, 204): raise SystemExit(f'{what} failed: HTTP {st} {json.dumps(r)[:800]}')
+    return r
+
 def new_id(): return ''.join(random.choices(string.ascii_lowercase + string.digits, k=24))
 
-# sign in, read the board
+def get_board(name):
+    st, r = request('GET', '/api/trpc/board.getBoardByName?input=' + urllib.parse.quote(json.dumps({'json': {'name': name}})))
+    return r['result']['data']['json'] if st == 200 else None
+
+# sign in
 st, csrf = request('GET', '/api/auth/csrf')
 request('POST', '/api/auth/callback/credentials', form={'csrfToken': csrf['csrfToken'], 'name': os.environ['HOMARR_USER'],
                                                        'password': os.environ['HOMARR_PASSWORD'], 'callbackUrl': f'https://{HOST}/'})
-st, r = request('GET', '/api/trpc/board.getBoardByName?input=' + urllib.parse.quote(json.dumps({'json': {'name': 'dagalab'}})))
-if st != 200: raise SystemExit(f'reading board failed: HTTP {st} {r}')
-board = r['result']['data']['json']
-layouts = {l['name']: l for l in board['layouts']}
-base, mobile = layouts['Base'], layouts['Mobile']
-section = next(s for s in board['sections'] if s['kind'] == 'empty')
+me = request('GET', '/api/auth/session')[1]['user']
 
-# apps: icons for the link tiles, plus Homepage's bookmarks
-st, apps = request('GET', '/api/apps', api=True)
+# boards: rename the onboarding board to Home, create the others
+existing = {b['name']: b for b in ok(*request('GET', '/api/boards', api=True), 'listing boards')}
+if 'Home' not in existing and 'dagalab' in existing:
+    ok(*request('PATCH', f'/api/boards/{existing["dagalab"]["id"]}/name', body={'name': 'Home'}, api=True), 'renaming board')
+    log('board dagalab -> Home')
+for name in BOARDS:
+    if name not in existing and not (name == 'Home' and 'dagalab' in existing):
+        ok(*request('POST', '/api/boards', body={'name': name, 'columnCount': 10, 'isPublic': False}, api=True), f'creating board {name}')
+        log(f'board {name}: created')
+boards = {name: get_board(name) for name in BOARDS}
+
+# apps: icons for the link tiles, Homepage's bookmarks, Homarr's own Kubernetes pages
+apps = ok(*request('GET', '/api/apps', api=True), 'listing apps')
 by_name = {a['name']: a for a in apps}
-WANT_APPS = {  # name: (href, iconUrl, description); existing apps only get their icon/href corrected
+WANT_APPS = {  # name: (href, iconUrl, description); existing apps only get their icon corrected
+    'Kubernetes': (f'https://{HOST}/manage/tools/kubernetes', f'{ICONS}/svg/kubernetes.svg', 'Nodes, pods, namespaces'),
     'Argo CD': (None, f'{ICONS}/svg/argo-cd.svg', None),
     'Grafana': (None, f'{ICONS}/svg/grafana.svg', None),
     'Longhorn': (None, f'{ICONS}/svg/longhorn.svg', None),
@@ -62,69 +82,88 @@ WANT_APPS = {  # name: (href, iconUrl, description); existing apps only get thei
 for name, (href, icon, desc) in WANT_APPS.items():
     a = by_name.get(name)
     if a is None:
-        st, a = request('POST', '/api/apps', body={'name': name, 'href': href, 'iconUrl': icon, 'description': desc, 'pingUrl': None}, api=True)
-        if st not in (200, 201): raise SystemExit(f'creating app {name} failed: HTTP {st} {a}')
+        ok(*request('POST', '/api/apps', body={'name': name, 'href': href, 'iconUrl': icon, 'description': desc, 'pingUrl': None}, api=True), f'creating app {name}')
         log(f'app {name}: created')
-        by_name[name] = a if isinstance(a, dict) and a.get('id') else None
     elif a.get('iconUrl') != icon:
         body = {k: a.get(k) for k in ('name', 'description', 'href', 'pingUrl')}; body['iconUrl'] = icon
-        st, r = request('PATCH', f'/api/apps/{a["id"]}', body=body, api=True)
-        log(f'app {name}: icon {"set" if st in (200, 204) else f"FAILED {st} {r}"}')
-st, apps = request('GET', '/api/apps', api=True)
-by_name = {a['name']: a for a in apps}
+        ok(*request('PATCH', f'/api/apps/{a["id"]}', body=body, api=True), f'app {name} icon')
+by_name = {a['name']: a for a in ok(*request('GET', '/api/apps', api=True), 'listing apps')}
 
-# widgets onboarding created, keyed by kind (keep id + integrations + options)
-widgets = {it['kind']: it for it in board['items'] if it['kind'] != 'app'}
-app_items = {it['options'].get('appId'): it for it in board['items'] if it['kind'] == 'app'}
-
-def widget(kind, options=None):
-    it = dict(widgets[kind]); it['options'] = {**(it.get('options') or {}), **(options or {})}; return it
-
-def launcher(app_name):
-    app = by_name[app_name]
-    it = app_items.get(app['id']) or {'kind': 'app', 'id': new_id(), 'integrationIds': [], 'advancedOptions': {}}
-    return {**it, 'options': {**(it.get('options') or {}), 'appId': app['id'], 'showTitle': True, 'pingEnabled': True}}
-
+# widget templates (kind -> options + integrations), from whichever board has them now
+templates = {}
+for b in boards.values():
+    for it in b['items']:
+        if it['kind'] != 'app' and it['kind'] not in templates:
+            templates[it['kind']] = it
 LEOMINSTER = {'name': 'Leominster', 'latitude': 42.5274, 'longitude': -71.7563}
-# (item, base x, y, w, h) on the 10-column base layout; mobile stacks them in this order on 3 columns
-ROWS = [
-    # launch bar
-    (widget('clock', {'customTimeFormat': 'h:mm A', 'showDate': True}), 0, 0, 2, 1),
-    (widget('weather', {'isFormatFahrenheit': True, 'location': LEOMINSTER, 'showCity': True, 'hasForecast': False}), 2, 0, 2, 1),
-    *[(launcher(n), 4 + i, 0, 1, 1) for i, n in enumerate(('Jellyfin', 'Seerr', 'Sonarr', 'Radarr', 'Bazarr', 'Prowlarr'))],
-    # watching
-    (widget('mediaServer'), 0, 1, 4, 2),
-    (widget('mediaReleases'), 4, 1, 3, 2),
-    (widget('mediaRequests-requestList'), 7, 1, 3, 2),
-    # library
-    (widget('calendar'), 0, 3, 3, 3),
-    (widget('mediaMissing'), 3, 3, 3, 3),
-    (widget('mediaRequests-requestStats'), 6, 3, 2, 3),
-    (widget('bazarr'), 8, 3, 2, 3),
-    # downloads
-    (widget('downloads'), 0, 6, 6, 3),
-    (widget('vpn'), 6, 6, 4, 1),
-    (widget('indexerManager'), 6, 7, 4, 2),
-    # platform + bookmarks as one launcher row (Homepage's bookmarks are launcher tiles here)
-    *[(launcher(n), i, 9, 1, 1) for i, n in enumerate(('qBittorrent', 'Argo CD', 'Grafana', 'Longhorn', 'Vault', 'Homepage',
-                                                        'UniFi', 'daga-nas (DSM)', 'dagalab-infra', 'Proton Mail'))],
-]
+OPTIONS = {
+    'clock': {'customTimeFormat': 'h:mm A', 'showDate': True},
+    'weather': {'isFormatFahrenheit': True, 'location': LEOMINSTER, 'showCity': True, 'hasForecast': False},
+}
 
-items, my, mx = [], 0, 0
-for it, x, y, w, h in ROWS:
-    mw = min(w, 3)
-    if mx + mw > 3: my += 1; mx = 0   # mobile: wrap at 3 columns (1x1 tiles pack three to a row)
-    lay = [{'layoutId': base['id'], 'sectionId': section['id'], 'xOffset': x, 'yOffset': y, 'width': w, 'height': h},
-           {'layoutId': mobile['id'], 'sectionId': section['id'], 'xOffset': mx, 'yOffset': my, 'width': mw, 'height': h}]
-    if mw == 3: my += h; mx = 0
-    else:
-        mx += mw
-        if mx >= 3: my += h; mx = 0
-    items.append({'kind': it['kind'], 'id': it['id'], 'options': it.get('options') or {},
-                  'integrationIds': it.get('integrationIds') or [], 'advancedOptions': it.get('advancedOptions') or {},
-                  'layouts': lay})
-dropped = sorted({it['kind'] for it in board['items']} - {i['kind'] for i in items})
-sections = [{k: s[k] for k in ('id', 'kind', 'xOffset', 'yOffset')} for s in board['sections'] if s['kind'] == 'empty']
-st, r = request('PUT', f'/api/boards/{board["id"]}/content', body={'sections': sections, 'items': items}, api=True)
-if st not in (200, 204): raise SystemExit(f'saving board failed: HTTP {st} {json.dumps(r)[:800]}')
-log(f'board saved: {len(items)} items; removed: {", ".join(dropped) or "nothing"} + broken app tiles')
+def widget(kind):
+    t = templates[kind]
+    return {'kind': kind, 'options': {**(t.get('options') or {}), **OPTIONS.get(kind, {})},
+            'integrationIds': t.get('integrationIds') or [], 'advancedOptions': t.get('advancedOptions') or {}}
+
+def launcher(name):
+    return {'kind': 'app', 'options': {'appId': by_name[name]['id'], 'showTitle': True, 'pingEnabled': True},
+            'integrationIds': [], 'advancedOptions': {}}
+
+def launchers(names, x0, y): return [(launcher(n), x0 + i, y, 1, 1) for i, n in enumerate(names)]
+
+# (item, x, y, w, h) on each board's 10-column base layout; mobile stacks them in this order on 3 columns
+LAYOUT = {
+    'Home': [
+        (widget('clock'), 0, 0, 2, 1), (widget('weather'), 2, 0, 2, 1),
+        *launchers(('Jellyfin', 'Seerr', 'Sonarr', 'Radarr', 'Bazarr', 'Prowlarr'), 4, 0),
+        (widget('mediaServer'), 0, 1, 4, 3), (widget('mediaReleases'), 4, 1, 3, 3), (widget('mediaRequests-requestList'), 7, 1, 3, 3),
+    ],
+    'Library': [
+        *launchers(('Sonarr', 'Radarr', 'Bazarr', 'Seerr', 'Jellyfin'), 0, 0),
+        (widget('calendar'), 0, 1, 4, 4), (widget('mediaMissing'), 4, 1, 4, 4),
+        (widget('mediaRequests-requestStats'), 8, 0, 2, 3), (widget('bazarr'), 8, 3, 2, 2),
+    ],
+    'Downloads': [
+        (widget('downloads'), 0, 0, 7, 4),
+        (widget('vpn'), 7, 0, 3, 1), (widget('indexerManager'), 7, 1, 3, 2),
+        *launchers(('qBittorrent', 'Prowlarr'), 7, 3),
+    ],
+    'Platform': [
+        *launchers(('Kubernetes', 'Argo CD', 'Grafana', 'Longhorn', 'Vault'), 0, 0),
+        *launchers(('Homepage', 'UniFi', 'daga-nas (DSM)', 'dagalab-infra', 'Proton Mail'), 0, 1),
+    ],
+}
+
+for name, rows in LAYOUT.items():
+    b = boards[name]
+    lays = sorted(b['layouts'], key=lambda l: l.get('breakpoint') or 0)
+    base, mobile = lays[-1], (lays[0] if len(lays) > 1 else None)
+    section = next(s for s in b['sections'] if s['kind'] == 'empty')
+    # keep ids of items already on this board (same kind, or same app) so widget state survives re-runs
+    pool = {}
+    for it in b['items']:
+        pool.setdefault((it['kind'], (it.get('options') or {}).get('appId')), []).append(it['id'])
+    items, my, mx = [], 0, 0
+    for it, x, y, w, h in rows:
+        ids = pool.get((it['kind'], it['options'].get('appId')))
+        lay = [{'layoutId': base['id'], 'sectionId': section['id'], 'xOffset': x, 'yOffset': y, 'width': w, 'height': h}]
+        if mobile:
+            mw = min(w, mobile['columnCount'])
+            if mx + mw > mobile['columnCount']: my += 1; mx = 0
+            lay.append({'layoutId': mobile['id'], 'sectionId': section['id'], 'xOffset': mx, 'yOffset': my, 'width': mw, 'height': h})
+            mx += mw
+            if mx >= mobile['columnCount']: my += h; mx = 0
+        items.append({**it, 'id': ids.pop(0) if ids else new_id(), 'layouts': lay})
+    sections = [{k: s[k] for k in ('id', 'kind', 'xOffset', 'yOffset')} for s in b['sections'] if s['kind'] == 'empty']
+    ok(*request('PUT', f'/api/boards/{b["id"]}/content', body={'sections': sections, 'items': items}, api=True), f'saving board {name}')
+    log(f'board {name}: {len(items)} items')
+
+# header: board tabs in the centre, search as an icon
+header = {'version': 3, 'visible': True, 'searchDisplay': 'icon', 'logoDisplay': 'logoAndText', 'zones': {
+    'left': [{'type': 'builtin', 'id': 'logo'}],
+    'center': [{'type': 'board', 'boardId': boards[n]['id']} for n in BOARDS],
+    'right': [{'type': 'builtin', 'id': i} for i in ('search', 'boardEdit', 'settings', 'user')],
+}}
+ok(*request('PATCH', '/api/users/header-preferences', body={'id': me['id'], 'headerPreferences': header}, api=True), 'header preferences')
+log(f'header: tabs {" | ".join(BOARDS)} for {me.get("name")}')

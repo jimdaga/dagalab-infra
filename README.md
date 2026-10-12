@@ -110,7 +110,7 @@ ingress-nginx was retired in March 2026, and Gateway API is where things are hea
 | `jellyfin.lab.internal` | Jellyfin (also plain `http://` for TV apps) |
 | `seerr.lab.internal` | Seerr (requests) |
 | `homepage.lab.internal` | Homepage: dashboard linking everything below, with cluster/node CPU+memory and pod status (read-only ClusterRole), Longhorn usage, Sonarr/Radarr release calendar, VPN status (Gluetun control server, API key from Vault `secret/gluetun`). Config in `argocd/apps/homepage/values.yaml` |
-| `homarr.lab.internal` | Homarr (trial): same services as Homepage as a drag-and-drop board with live integrations (Jellyfin now playing, Seerr requests, calendar, downloads, VPN, Prowlarr, Bazarr, missing media). Config is in its SQLite DB on Longhorn, **not** in git; seeded once by `scripts/homarr-setup.sh` (admin `jim`, password + API key in Vault `secret/homarr`) |
+| `homarr.lab.internal` | Homarr (trial): same services as Homepage as a drag-and-drop board with live integrations (Jellyfin now playing, Seerr requests, calendar, downloads, VPN, Prowlarr, Bazarr, missing media). Config is in its SQLite DB on Longhorn, **not** in git; seeded by `scripts/homarr-setup.sh` (admin `jim`, password + API key in Vault `secret/homarr`); `scripts/homarr-board.py` lays out four boards shown as header tabs (Home, Library, Downloads, Platform; re-runnable, resets UI edits) |
 | `torrent.lab.internal` | qBittorrent |
 | `sonarr.lab.internal` / `radarr.lab.internal` / `prowlarr.lab.internal` | *arr apps |
 | `argocd.lab.internal` | Argo CD |
