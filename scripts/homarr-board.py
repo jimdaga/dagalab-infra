@@ -2,7 +2,7 @@
 """Lay out Homarr's boards and header tabs (run by scripts/homarr-setup.sh after onboarding; safe to re-run).
 
 Env: HOMARR_USER/HOMARR_PASSWORD (to read boards and set the header), HOMARR_API_KEY (REST), CA_FILE.
-Four boards, pinned as tabs in the header (centre zone) of HOMARR_USER:
+Four boards, pinned as tabs in the header (centre zone) of HOMARR_USER, each with an icon (shown as the tab) and title:
   Home      clock, weather, media launchers, now playing, recently added, requests
   Library   calendar, missing/queued, request stats, subtitles
   Downloads qBittorrent, VPN, indexers
@@ -158,6 +158,17 @@ for name, rows in LAYOUT.items():
     sections = [{k: s[k] for k in ('id', 'kind', 'xOffset', 'yOffset')} for s in b['sections'] if s['kind'] == 'empty']
     ok(*request('PUT', f'/api/boards/{b["id"]}/content', body={'sections': sections, 'items': items}, api=True), f'saving board {name}')
     log(f'board {name}: {len(items)} items')
+
+# tab look: the header renders board shortcuts as the board's logo (initials without one) with the name as tooltip,
+# and shows the current board's logo + page title top-left, so each board gets an icon and its name as title
+LOOK = {'Home': 'jellyfin', 'Library': 'sonarr', 'Downloads': 'qbittorrent', 'Platform': 'kubernetes'}
+for name, icon in LOOK.items():
+    bid = boards[name]['id']
+    cur = ok(*request('GET', f'/api/boards/{bid}/settings', api=True), f'reading {name} settings')
+    want = {'logoImageUrl': f'{ICONS}/svg/{icon}.svg', 'pageTitle': name, 'metaTitle': f'{name} | dagalab'}
+    if any(cur.get(k) != v for k, v in want.items()):
+        ok(*request('PATCH', f'/api/boards/{bid}/settings', body={**{k: v for k, v in cur.items() if k != 'id'}, **want}, api=True), f'{name} settings')
+        log(f'board {name}: logo {icon}, title {name}')
 
 # header: board tabs in the centre, search as an icon
 header = {'version': 3, 'visible': True, 'searchDisplay': 'icon', 'logoDisplay': 'logoAndText', 'zones': {
