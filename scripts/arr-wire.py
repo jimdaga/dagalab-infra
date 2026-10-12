@@ -139,26 +139,7 @@ for name, a in APPS.items():
             print(f'   Jellyfin connection: {"updated" if jf.get("id") else "created"} (HTTP {st}; {", ".join(events)})' if st in (200, 201, 202) else f'   Jellyfin connection FAILED {st}: {r}')
             ok &= st in (200, 201, 202)
 
-    # Never grab AV1: the UHD 630 can't decode it in hardware and many TVs/Apple devices can't direct-play it.
-    # A custom format scored far below every profile's minimum (0) makes such releases rejected outright.
-    st, cfs = call(u, k, 'GET', '/customformat')
-    av1 = next((c for c in cfs if c['name'] == 'AV1'), None)
-    if av1 is None:
-        st, av1 = call(u, k, 'POST', '/customformat', {'name': 'AV1', 'includeCustomFormatWhenRenaming': False, 'specifications': [
-            {'name': 'AV1', 'implementation': 'ReleaseTitleSpecification', 'negate': False, 'required': True,
-             'fields': [{'name': 'value', 'value': r'\bAV1\b'}]}]})
-        print(f'   custom format AV1: created (HTTP {st})' if st in (200, 201) else f'   custom format AV1 FAILED {st}: {av1}'); ok &= st in (200, 201)
-    else:
-        print('   custom format AV1: present')
-    for qp in call(u, k, 'GET', '/qualityprofile')[1]:
-        item = next((f for f in qp['formatItems'] if f['format'] == av1['id']), None)
-        if item and item['score'] == -10000 and qp['minFormatScore'] >= 0:
-            continue
-        if item: item['score'] = -10000
-        else: qp['formatItems'].append({'format': av1['id'], 'name': 'AV1', 'score': -10000})
-        qp['minFormatScore'] = max(qp['minFormatScore'], 0)
-        st, r = call(u, k, 'PUT', f'/qualityprofile/{qp["id"]}', qp)
-        print(f'   profile {qp["name"]}: AV1 scored -10000 (HTTP {st})' if st in (200, 202) else f'   profile {qp["name"]} FAILED {st}: {r}'); ok &= st in (200, 202)
+    # Quality profiles and custom formats (incl. no-AV1) are owned by Recyclarr (argocd/apps/recyclarr), not this script.
 
 # Prowlarr -> Radarr/Sonarr applications (full sync of indexers)
 p = PROWLARR

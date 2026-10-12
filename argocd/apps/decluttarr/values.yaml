@@ -1,0 +1,76 @@
+# Decluttarr: every 10 min cleans the Sonarr/Radarr queues (stalled, failed, orphaned downloads) so they search for
+# an alternative, and periodically searches for missing episodes/movies (RSS alone never back-fills).
+# No UI; config below. Private trackers: torrents are removed outright (a stalled torrent left in qBittorrent would
+# hold one of the 3 download slots forever); only after 2h with no connections, so partly-downloaded ones are rare.
+# Tag a torrent "Keep" in qBittorrent to protect it.
+controllers:
+  decluttarr:
+    strategy: Recreate
+    containers:
+      app:
+        image:
+          repository: ghcr.io/manimatter/decluttarr
+          tag: v2.2.0
+        env:
+          TZ: America/New_York
+          SONARR_API_KEY:
+            valueFrom:
+              secretKeyRef: {name: sonarr, key: SONARR__AUTH__APIKEY}
+          RADARR_API_KEY:
+            valueFrom:
+              secretKeyRef: {name: radarr, key: RADARR__AUTH__APIKEY}
+        resources:
+          requests:
+            cpu: 10m
+            memory: 64Mi
+          limits:
+            memory: 256Mi
+
+configMaps:
+  config:
+    data:
+      config.yaml: |
+        general:
+          log_level: INFO
+          test_run: true            # TODO: flip to false after reviewing what it would remove
+          timer: 10                 # minutes between runs
+          private_tracker_handling: remove
+          public_tracker_handling: remove
+          protected_tag: Keep
+        job_defaults:
+          max_strikes: 3
+          min_days_between_searches: 7
+          max_concurrent_searches: 3
+        jobs:
+          remove_failed_downloads: true
+          # only "nothing to gain" imports; never "Sample"/unknown files, which Unpackerr may still be extracting
+          remove_failed_imports:
+            message_patterns:
+              - "Not an upgrade for existing*"
+              - "Not a Custom Format upgrade*"
+          remove_metadata_missing: true
+          remove_missing_files: true
+          remove_orphans: true
+          remove_stalled:
+            max_strikes: 12         # 12 x 10 min = stalled with no connections for 2h
+          search_missing: true      # back-fill monitored missing episodes/movies, 3 per run, each at most weekly
+        instances:
+          sonarr:
+            - base_url: http://sonarr.media.svc.cluster.local:8989
+              api_key: !ENV SONARR_API_KEY
+          radarr:
+            - base_url: http://radarr.media.svc.cluster.local:7878
+              api_key: !ENV RADARR_API_KEY
+        download_clients:
+          qbittorrent:
+            - base_url: http://qbittorrent.media.svc.cluster.local:8080   # trusts the pod network: no login
+              name: qBittorrent
+
+persistence:
+  config:
+    type: configMap
+    identifier: config
+    globalMounts:
+      - path: /app/config/config.yaml
+        subPath: config.yaml
+        readOnly: true

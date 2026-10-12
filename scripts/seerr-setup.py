@@ -10,7 +10,7 @@ import http.cookiejar, json, os, sys, urllib.error, urllib.request
 
 B = 'http://127.0.0.1:15055/api/v1'
 SVC = 'media.svc.cluster.local'
-QUALITY = 'HD-1080p'
+QUALITY = {'radarr': 'HD Bluray + WEB', 'sonarr': 'WEB-1080p'}   # Recyclarr-managed (TRaSH) profiles
 jar = http.cookiejar.CookieJar()
 opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(jar))
 
@@ -69,13 +69,21 @@ log(f'full library sync started: {st}')
 # 4) Radarr + Sonarr
 def arr(kind, port, key, root, extra):
     st, existing = call('GET', f'/settings/{kind}')
-    if existing:
-        log(f'{kind}: present'); return
     base = dict(hostname=f'{kind}.{SVC}', port=port, apiKey=key, useSsl=False, baseUrl='')
     st, t = call('POST', f'/settings/{kind}/test', base)
     if st != 200:
         log(f'{kind} test FAILED: {st} {t}'); return
-    prof = next(p for p in t['profiles'] if p['name'] == QUALITY)
+    prof = next(p for p in t['profiles'] if p['name'] == QUALITY[kind])
+    if existing:
+        cur = existing[0]
+        if cur.get('activeProfileId') == prof['id']:
+            log(f'{kind}: present (profile {prof["name"]})'); return
+        upd = {k: v for k, v in cur.items() if k != 'id'}   # id is read-only in the update body
+        upd.update(activeProfileId=prof['id'], activeProfileName=prof['name'], apiKey=key)
+        if kind == 'sonarr':
+            upd.update(activeAnimeProfileId=prof['id'], activeAnimeProfileName=prof['name'])
+        st, r = call('PUT', f'/settings/{kind}/{cur["id"]}', upd)
+        log(f'{kind}: profile -> {prof["name"]} ({st} {r if st >= 300 else ""})'); return
     rf = next(f for f in t['rootFolders'] if f['path'].rstrip('/') == root)
     body = dict(base, name=kind.capitalize(), activeProfileId=prof['id'], activeProfileName=prof['name'],
                 activeDirectory=rf['path'], is4k=False, isDefault=True, externalUrl=f'https://{kind}.lab.internal',

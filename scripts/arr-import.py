@@ -13,7 +13,7 @@ import json, os, re, sys, time, unicodedata, urllib.parse, urllib.request, urlli
 
 MODE = sys.argv[1] if len(sys.argv) > 1 else 'plan'
 REPORT = os.environ.get('IMPORT_REPORT', '/tmp/arr-import-report.json')
-QUALITY = 'HD-1080p'
+QUALITY = 'HD Bluray + WEB'   # Recyclarr-managed (TRaSH) profile; imports are unmonitored, so no upgrades
 # Manual decisions for folders the matcher can't settle: folder name -> tmdbId (movies) / tvdbId (shows), or None to skip.
 OVERRIDES = json.loads(os.environ.get('IMPORT_OVERRIDES', '{}'))
 
