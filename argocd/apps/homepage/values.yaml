@@ -69,13 +69,18 @@ configMaps:
                 icon: jellyfin.png
                 description: Watch
                 siteMonitor: http://jellyfin.media.svc.cluster.local:8096/health
+                # Homepage's built-in jellyfin widget still calls /emby/...?api_key=, which Jellyfin 12 rejects;
+                # customapi sends the key in the header Jellyfin 12 accepts (and keeps it out of URLs/logs).
                 widget:
-                  type: jellyfin
-                  version: 2   # Jellyfin 10.11+/12 only accept "Authorization: MediaBrowser Token=..."
-                  url: http://jellyfin.media.svc.cluster.local:8096
-                  key: "{{ "{{HOMEPAGE_VAR_JELLYFIN_KEY}}" }}"
-                  enableBlocks: true
-                  enableNowPlaying: true
+                  type: customapi
+                  url: http://jellyfin.media.svc.cluster.local:8096/Items/Counts
+                  method: GET
+                  headers:
+                    Authorization: MediaBrowser Token="{{ "{{HOMEPAGE_VAR_JELLYFIN_KEY}}" }}"
+                  mappings:
+                    - { field: MovieCount, label: Movies, format: number }
+                    - { field: SeriesCount, label: Shows, format: number }
+                    - { field: EpisodeCount, label: Episodes, format: number }
             - Seerr:
                 href: https://seerr.lab.internal
                 icon: jellyseerr.png

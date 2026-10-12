@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Idempotent Jellyfin first-run + config over its API (via a port-forward on 127.0.0.1:18096).
+--rotate=<app> revokes and reissues that app's API key (e.g. after it leaked).
 
 Env: JF_USER, JF_PASSWORD (admin to create/log in as). Prints API keys only as KEY_<app>=... lines on
 stdout when --emit-keys is given (the caller pipes them into Vault; nothing else prints secrets).
@@ -9,6 +10,7 @@ import json, os, sys, time, urllib.parse, urllib.request, urllib.error
 B = 'http://127.0.0.1:18096'
 USER, PW = os.environ['JF_USER'], os.environ['JF_PASSWORD']
 EMIT = '--emit-keys' in sys.argv
+ROTATE = [a.split('=', 1)[1] for a in sys.argv if a.startswith('--rotate=')]   # e.g. --rotate=homepage
 AUTH = 'MediaBrowser Client="dagalab-setup", Device="cli", DeviceId="dagalab-setup", Version="1.0"'
 LIBS = [('Movies', 'movies', '/data/movies'), ('Shows', 'tvshows', '/data/tv'), ('Home Videos', 'homevideos', '/data/theme-parks')]
 KEY_APPS = ['homepage', 'seerr']
@@ -86,6 +88,10 @@ log(f'library scan started: {st}')
 # 6) API keys for other apps
 st, keys = call('GET', '/Auth/Keys', token=T)
 items = {k['AppName']: k['AccessToken'] for k in keys.get('Items', [])}
+for app in ROTATE:
+    if app in items:
+        st, _ = call('DELETE', f'/Auth/Keys/{items.pop(app)}', token=T)
+        log(f'api key {app}: revoked ({st}), issuing a new one')
 for app in KEY_APPS:
     if app not in items:
         call('POST', f'/Auth/Keys?app={app}', token=T)
