@@ -13,9 +13,11 @@ controllers:
           TZ: America/New_York
           PUID: "1029"
           PGID: "100"
-          PROWLARR__AUTH__METHOD: Forms
-          # LAN/cluster/port-forward clients skip login; anything routed in later must log in
-          PROWLARR__AUTH__REQUIRED: DisabledForLocalAddresses
+          # LAN is trusted (README "LAN access"): no built-in login. Reachable only in-cluster and via the
+          # LAN gateway (https://prowlarr.lab.internal). Servarr treats every proxied request as non-local, so
+          # "DisabledForLocalAddresses" can't work behind the gateway; External = auth handled outside the app.
+          # MUST switch to Forms (or put real auth in front) before exposing this via the public shared-gateway.
+          PROWLARR__AUTH__METHOD: External
         envFrom:
           - secretRef:
               name: prowlarr   # PROWLARR__AUTH__APIKEY

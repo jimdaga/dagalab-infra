@@ -97,7 +97,7 @@ ingress-nginx was retired in March 2026, and Gateway API is where things are hea
 
 ## LAN access (`*.lab.internal`)
 
-`https://<app>.lab.internal` for every UI, LAN only, via the Envoy gateway on **192.168.3.201** with a wildcard certificate from the homelab CA (`helm/charts/lab-ca`). HTTP redirects to HTTPS. LAN is trusted: apps that skip auth for local addresses don't prompt through the gateway.
+`https://<app>.lab.internal` for every UI, LAN only, via the Envoy gateway on **192.168.3.201** with a wildcard certificate from the homelab CA (`helm/charts/lab-ca`). HTTP redirects to HTTPS. LAN is trusted: the *arr apps run with `AUTH__METHOD=External` (no built-in login; Servarr treats every proxied request as non-local, so "disabled for local addresses" can't work behind a gateway), and qBittorrent bypasses auth for the pod network the gateway connects from. **Before exposing any of these through the public shared-gateway, give them real auth.**
 
 | URL | App |
 |---|---|
@@ -164,7 +164,7 @@ Deploy order, so Jellyfin scans an already clean, ID-tagged library once:
 4. **Jellyfin**:
    - Config/metadata on Longhorn (SQLite: never NFS). `media-data` mounted **read-only**. Transcode dir on node-local `emptyDir`.
    - **Hardware transcoding**: every node is an i7-9700 with UHD 630 (Quick Sync, `i915`, `/dev/dri/renderD128`, `render` GID 991): H.264 + HEVC 8/10-bit, no AV1. Deploy Intel's GPU device plugin (`gpu.intel.com/i915`, shared) so Jellyfin can schedule on any node.
-   - **Local only for now**: `https://jellyfin.lab.internal` through the LAN gateway (192.168.3.201; add a route in `helm/charts/lan-gateway/values.yaml`). TVs on the main LAN won't auto-discover across VLANs; enter the server URL once per client. TV apps that can't trust the homelab CA can use `http://192.168.3.201` + Host header-free access via a plain-HTTP listener if needed.
+   - **Local only for now**: `https://jellyfin.lab.internal` through the LAN gateway (192.168.3.201; add a route in `helm/charts/lan-gateway/values.yaml`). TVs on the main LAN won't auto-discover across VLANs; enter the server URL once per client. TV apps can't install the homelab CA, so Jellyfin will likely also need a plain-HTTP route (decide when deploying it).
    - Libraries: Movies (`/data/movies`), Shows (`/data/tv`), Home Videos (`/data/theme-parks`).
    - Later: `jellyfin.jimdaga.dev` via the shared gateway once the Cloudflare move happens (see TODO).
 
