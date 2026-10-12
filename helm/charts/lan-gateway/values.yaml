@@ -24,6 +24,7 @@ routes:
   - { host: sonarr,   namespace: media,           service: sonarr,                        port: 8989 }
   - { host: radarr,   namespace: media,           service: radarr,                        port: 7878 }
   - { host: prowlarr, namespace: media,           service: prowlarr,                      port: 9696 }
+  - { host: bazarr,   namespace: media,           service: bazarr,                        port: 6767 }
   - { host: argocd,   namespace: argocd,          service: argocd-server,                 port: 80 }
   - { host: grafana,  namespace: monitoring,      service: kube-prometheus-stack-grafana, port: 80 }
   - { host: longhorn, namespace: longhorn-system, service: longhorn-frontend,             port: 80 }

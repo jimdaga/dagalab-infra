@@ -1,0 +1,55 @@
+# Bazarr: downloads subtitles for everything Sonarr/Radarr manage (English, as .srt next to the video) and
+# backfills the existing library. UI: https://bazarr.lab.internal. Settings live in its DB/config and are applied by
+# scripts/bazarr-setup.sh (Sonarr/Radarr connections, language profile, providers); its API key goes to Vault secret/bazarr.
+controllers:
+  bazarr:
+    strategy: Recreate
+    containers:
+      app:
+        image:
+          repository: lscr.io/linuxserver/bazarr
+          tag: v1.6.2-ls367
+        env:
+          TZ: America/New_York
+          # DSM user `media` (uid 1029, group users=100): writes .srt files next to the media
+          PUID: "1029"
+          PGID: "100"
+        probes:
+          liveness: &probe
+            enabled: true
+            custom: true
+            spec:
+              httpGet:
+                path: /
+                port: 6767
+              periodSeconds: 30
+              failureThreshold: 5
+          readiness: *probe
+        resources:
+          requests:
+            cpu: 50m
+            memory: 256Mi
+          limits:
+            memory: 1Gi
+
+service:
+  app:
+    controller: bazarr
+    ports:
+      http:
+        port: 6767
+
+persistence:
+  # SQLite config DB: Longhorn, never NFS
+  config:
+    type: persistentVolumeClaim
+    accessMode: ReadWriteOnce
+    size: 2Gi
+    globalMounts:
+      - path: /config
+  # Same /data paths as Sonarr/Radarr, so no path mapping is needed
+  data:
+    type: persistentVolumeClaim
+    existingClaim: media-data
+    globalMounts:
+      - path: /data
