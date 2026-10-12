@@ -90,6 +90,9 @@ configMaps:
         hideVersion: true
         useEqualHeights: true
         showStats: false        # per-tile CPU/memory appears on hover-expand ("expand" below)
+        providers:
+          longhorn:
+            url: http://longhorn-frontend.longhorn-system.svc.cluster.local   # used by the longhorn info widget
         quicklaunch:
           searchDescriptions: true
           hideInternetSearch: false
@@ -281,7 +284,6 @@ configMaps:
             total: true
             labels: true
             nodes: true
-            url: http://longhorn-frontend.longhorn-system.svc.cluster.local
         - search:
             provider: duckduckgo
             target: _blank
