@@ -97,10 +97,14 @@ configMaps:
           searchDescriptions: true
           hideInternetSearch: false
         layout:
-          Media:
+          Watch:
+            style: row
+            columns: 2
+            icon: mdi-play-box-multiple
+          Library:
             style: row
             columns: 3
-            icon: mdi-play-box-multiple
+            icon: mdi-bookshelf
           Downloads:
             style: row
             columns: 3
@@ -111,14 +115,14 @@ configMaps:
             icon: mdi-calendar-star
           Platform:
             style: row
-            columns: 4
+            columns: 5
             icon: mdi-kubernetes
 
       kubernetes.yaml: |
         mode: cluster
 
       services.yaml: |
-        - Media:
+        - Watch:
             - Jellyfin:
                 href: https://jellyfin.lab.internal
                 icon: jellyfin.png
@@ -126,18 +130,16 @@ configMaps:
                 namespace: media
                 app: jellyfin
                 siteMonitor: http://jellyfin.media.svc.cluster.local:8096/health
-                # Homepage's built-in jellyfin widget still calls /emby/...?api_key=, which Jellyfin 12 rejects;
-                # customapi sends the key in the header Jellyfin 12 accepts (and keeps it out of URLs/logs).
+                # version 2 = Jellyfin 10.11+/12 API (Authorization: MediaBrowser Token header, no /emby or api_key)
                 widget:
-                  type: customapi
-                  url: http://jellyfin.media.svc.cluster.local:8096/Items/Counts
-                  method: GET
-                  headers:
-                    Authorization: MediaBrowser Token="{{ "{{HOMEPAGE_VAR_JELLYFIN_KEY}}" }}"
-                  mappings:
-                    - { field: MovieCount, label: Movies, format: number }
-                    - { field: SeriesCount, label: Shows, format: number }
-                    - { field: EpisodeCount, label: Episodes, format: number }
+                  type: jellyfin
+                  version: 2
+                  url: http://jellyfin.media.svc.cluster.local:8096
+                  key: "{{ "{{HOMEPAGE_VAR_JELLYFIN_KEY}}" }}"
+                  enableBlocks: true        # library counts (movies / series / episodes)
+                  enableNowPlaying: true    # active streams, with pause/resume
+                  enableUser: true
+                  showEpisodeNumber: true
             - Seerr:
                 href: https://seerr.lab.internal
                 icon: jellyseerr.png
@@ -149,6 +151,7 @@ configMaps:
                   type: jellyseerr   # Seerr keeps the Jellyseerr/Overseerr API
                   url: http://seerr.media.svc.cluster.local:5055
                   key: "{{ "{{HOMEPAGE_VAR_SEERR_KEY}}" }}"
+        - Library:
             - Sonarr:
                 href: https://sonarr.lab.internal
                 icon: sonarr.png
@@ -228,11 +231,11 @@ configMaps:
                   previousDays: 1
                   integrations:
                     - type: sonarr
-                      service_group: Media
+                      service_group: Library
                       service_name: Sonarr
                       color: teal
                     - type: radarr
-                      service_group: Media
+                      service_group: Library
                       service_name: Radarr
                       color: amber
         - Platform:
@@ -250,6 +253,25 @@ configMaps:
                 namespace: monitoring
                 app: grafana
                 siteMonitor: http://kube-prometheus-stack-grafana.monitoring.svc.cluster.local/api/health
+            - Media pipeline:
+                href: https://grafana.lab.internal/d/dagalab-media-pipeline
+                icon: mdi-pipe
+                description: Alerts, subtitles, extraction, free space
+                widget:
+                  type: prometheusmetric
+                  url: http://kube-prometheus-stack-prometheus.monitoring.svc.cluster.local:9090
+                  refreshInterval: 60000
+                  metrics:
+                    - label: Alerts firing
+                      query: count(ALERTS{alertstate="firing", alertname!="Watchdog"}) or vector(0)
+                    - label: Missing subs
+                      query: sum(bazarr_subtitles_missing_total{namespace="media"})
+                    - label: Extracting
+                      query: sum(unpackerr_gauges{namespace="media", name=~"queued|extracting"}) or vector(0)
+                    - label: Media free
+                      query: min(sonarr_rootfolder_freespace_bytes{namespace="media"})
+                      format:
+                        type: bytes
             - Longhorn:
                 href: https://longhorn.lab.internal
                 icon: longhorn.png

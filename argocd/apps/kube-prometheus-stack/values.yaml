@@ -32,3 +32,8 @@ alertmanager:
           resources:
             requests:
               storage: 5Gi
+
+# RKE2's kube-proxy serves metrics on 127.0.0.1:10249 only, so the scrape always fails and KubeProxyDown fires forever.
+# Don't scrape it (and don't alert on it) rather than reconfigure every node.
+kubeProxy:
+  enabled: false
