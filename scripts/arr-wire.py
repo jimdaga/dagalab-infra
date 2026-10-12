@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Idempotently wire Radarr/Sonarr/Prowlarr over their APIs (via local port-forwards).
-Env: RADARR_KEY, SONARR_KEY, PROWLARR_KEY. Ports: radarr 17878, sonarr 18989, prowlarr 19696 on localhost."""
-import json, os, sys, urllib.request, urllib.error
+Env: RADARR_KEY, SONARR_KEY, PROWLARR_KEY. Ports: radarr 17878, sonarr 18989, prowlarr 19696, qbittorrent 18080 on localhost."""
+import json, os, sys, urllib.parse, urllib.request, urllib.error
 
 SVC = 'media.svc.cluster.local'
 APPS = {
@@ -9,6 +9,21 @@ APPS = {
     'sonarr':   dict(url='http://127.0.0.1:18989/api/v3', key=os.environ['SONARR_KEY'],  root='/data/tv',     cat_field='tvCategory',    cat='tv',     port=8989),
 }
 PROWLARR = dict(url='http://127.0.0.1:19696/api/v1', key=os.environ['PROWLARR_KEY'])
+QBT = 'http://127.0.0.1:18080/api/v2'   # port-forwarded: arrives from localhost, so no login needed...
+QBT_HOST = '127.0.0.1:8080'             # ...as long as the Host header names qBittorrent's own port (else 401)
+
+# Seeding goals per private tracker, so nothing lands on a hit-and-run list. qBittorrent stops a torrent when
+# EITHER limit is hit, matching the trackers' "ratio OR time" rules; Sonarr/Radarr then remove it (data stays
+# in the library: imports are hardlinks). Keyed by Prowlarr definition name; trackers = announce hostnames.
+#   TorrentLeech: 1:1 or 10 days -> 1.5 / 14 days.  wigornot: ratio 10 or 1 year (its feed's minimumratio/seedtime).
+SEED = {
+    'torrentleech': dict(ratio=1.5, minutes=14 * 24 * 60,  trackers=('torrentleech.org', 'tleechreload.org')),
+    'wigornot':     dict(ratio=10,  minutes=365 * 24 * 60, trackers=('wigornot.com',)),
+}
+# Seed everything that's finished: only downloads are queued (3 at a time); no cap on active seeding,
+# no global stop (torrents without a per-tracker goal seed indefinitely). Stop (not remove) at a goal so the *arr apps clean up.
+QBT_PREFS = dict(queueing_enabled=True, max_active_downloads=3, max_active_uploads=-1, max_active_torrents=-1,
+                 dont_count_slow_torrents=True, max_ratio_enabled=False, max_seeding_time_enabled=False, max_ratio_act=0)
 
 def call(base, key, method, path, body=None):
     req = urllib.request.Request(base + path, method=method, headers={'X-Api-Key': key, 'Content-Type': 'application/json'},
@@ -111,6 +126,46 @@ for name, a in APPS.items():
         print(f'   application {impl} test FAILED {st}: {r}'); ok = False; continue
     st, r = call(p['url'], p['key'], 'POST', '/applications', app)
     print(f'   application {impl}: test OK, created (HTTP {st})' if st in (200, 201) else f'   create FAILED {st}: {r}'); ok &= st in (200, 201)
+
+# Prowlarr indexer seed goals (pushed to Radarr/Sonarr, which set per-torrent limits in qBittorrent on grab)
+st, indexers = call(p['url'], p['key'], 'GET', '/indexer')
+for ix in indexers:
+    goal = SEED.get((ix.get('definitionName') or '').lower())
+    if not goal:
+        continue
+    want = {'torrentBaseSettings.seedRatio': goal['ratio'], 'torrentBaseSettings.seedTime': goal['minutes'],
+            'torrentBaseSettings.packSeedTime': goal['minutes']}
+    cur = {f['name']: f.get('value') for f in ix['fields']}
+    if all(cur.get(n) == v for n, v in want.items()):
+        print(f'   seed goal {ix["name"]}: already set'); continue
+    for n, v in want.items():
+        setf(ix['fields'], n, v)
+    st, r = call(p['url'], p['key'], 'PUT', f'/indexer/{ix["id"]}?forceSave=true', ix)
+    print(f'   seed goal {ix["name"]}: ratio {goal["ratio"]} / {goal["minutes"] // 1440} days (HTTP {st})' if st in (200, 202) else f'   seed goal {ix["name"]} FAILED {st}: {r}')
+    ok &= st in (200, 202)
+
+# qBittorrent: preferences + bring torrents grabbed before these goals existed in line with their tracker
+def qbt(path, form=None):
+    req = urllib.request.Request(QBT + path, headers={'Host': QBT_HOST},
+                                 data=urllib.parse.urlencode(form).encode() if form is not None else None)
+    with urllib.request.urlopen(req, timeout=30) as r:
+        raw = r.read(); return json.loads(raw) if raw and raw[:1] in b'[{' else raw.decode()
+print(f'== qbittorrent {qbt("/app/version")}')
+prefs = qbt('/app/preferences')
+if any(prefs.get(n) != v for n, v in QBT_PREFS.items()):
+    qbt('/app/setPreferences', {'json': json.dumps(QBT_PREFS)})
+    print('   preferences (unlimited seeding, 3 downloads): updated')
+else:
+    print('   preferences (unlimited seeding, 3 downloads): already set')
+for name, goal in SEED.items():
+    stale = [t['hash'] for t in qbt('/torrents/info')
+             if any(h in (t.get('tracker') or '') for h in goal['trackers'])
+             and (t['ratio_limit'] != goal['ratio'] or t['seeding_time_limit'] != goal['minutes'])]
+    if stale:
+        qbt('/torrents/setShareLimits', {'hashes': '|'.join(stale), 'ratioLimit': goal['ratio'],
+                                         'seedingTimeLimit': goal['minutes'], 'inactiveSeedingTimeLimit': -2,
+                                         'shareLimitAction': 'Default'})   # Default = global max_ratio_act (Stop)
+    print(f'   {name} torrents: {len(stale)} share limits updated')
 
 # health
 for name, (u, k) in {**{n: (a['url'], a['key']) for n, a in APPS.items()}, 'prowlarr': (p['url'], p['key'])}.items():
