@@ -5,7 +5,7 @@
 # is untouched, reclaim policy is Retain) and let Argo CD recreate them.
 nfs:
   server: 192.168.3.21          # daga-nas port 2, reserved for Kubernetes NFS
-  path: /volume2/video          # TODO: interim share; needs an NFS rule for 192.168.3.11-13 (not exported yet)
+  path: /volume2/video          # NFS rule: 192.168.3.11-13 only, RW, root squashed to guest; writable by DSM user media (1029:100)
   mountOptions:
     - nfsvers=4.1
     - hard

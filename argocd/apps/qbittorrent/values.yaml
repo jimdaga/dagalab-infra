@@ -49,8 +49,8 @@ controllers:
         env:
           WEBUI_PORT: "8080"
           TZ: America/New_York
-          # TODO: match the owner of the NAS share (DSM user/group IDs)
-          PUID: "1026"
+          # DSM user `media` (uid 1029, group users=100): Read/Write on the video share only
+          PUID: "1029"
           PGID: "100"
 
 service:
