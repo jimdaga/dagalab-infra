@@ -301,6 +301,9 @@ configMaps:
             - daga-nas (DSM):
                 - icon: synology-dsm.png
                   href: https://192.168.3.20:5001
+            - Homarr (trial):
+                - icon: homarr.png
+                  href: https://homarr.lab.internal
         - Personal:
             - Proton Mail:
                 - icon: proton-mail.png

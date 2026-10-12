@@ -1,0 +1,89 @@
+# Homarr (trial, to compare with Homepage): https://homarr.lab.internal
+# Unlike Homepage, boards/apps/integrations live in its database (/appdata on Longhorn), edited in the UI or seeded by
+# scripts/homarr-setup.sh. SECRET_ENCRYPTION_KEY (encrypts integration secrets in that DB) comes from Vault secret/homarr.
+controllers:
+  homarr:
+    strategy: Recreate
+    serviceAccount:
+      identifier: homarr
+    pod:
+      automountServiceAccountToken: true   # Kubernetes pages (Manage > Tools > Kubernetes)
+    containers:
+      app:
+        image:
+          repository: ghcr.io/homarr-labs/homarr
+          tag: v2.4.1
+        env:
+          TZ: America/New_York
+          BASE_URL: https://homarr.lab.internal
+          ENABLE_KUBERNETES: "true"
+          # the LAN gateway (Envoy) reaches Homarr from the pod network; trust its X-Forwarded-For
+          HOMARR_TRUSTED_PROXIES: 10.42.0.0/16
+        envFrom:
+          - secretRef:
+              name: homarr   # SECRET_ENCRYPTION_KEY
+        probes:
+          liveness:
+            enabled: true
+            custom: true
+            spec:
+              httpGet:
+                path: /api/health/live
+                port: 7575
+              periodSeconds: 30
+              failureThreshold: 5
+          readiness:
+            enabled: true
+            custom: true
+            spec:
+              httpGet:
+                path: /api/health/ready
+                port: 7575
+              periodSeconds: 15
+        resources:
+          requests:
+            cpu: 50m
+            memory: 256Mi
+          limits:
+            memory: 1Gi
+
+# Read-only cluster access for Homarr's Kubernetes pages
+serviceAccount:
+  homarr: {}
+rbac:
+  roles:
+    homarr:
+      type: ClusterRole
+      rules:
+        - apiGroups: [""]
+          resources: [namespaces, nodes, pods, services, configmaps, persistentvolumeclaims]
+          verbs: [get, list]
+        - apiGroups: [networking.k8s.io]
+          resources: [ingresses]
+          verbs: [get, list]
+        - apiGroups: [metrics.k8s.io]
+          resources: [nodes, pods]
+          verbs: [get, list]
+  bindings:
+    homarr:
+      type: ClusterRoleBinding
+      roleRef:
+        identifier: homarr
+      subjects:
+        - identifier: homarr
+
+service:
+  app:
+    controller: homarr
+    ports:
+      http:
+        port: 7575
+
+persistence:
+  # SQLite DB + uploaded icons: Longhorn, never NFS
+  appdata:
+    type: persistentVolumeClaim
+    accessMode: ReadWriteOnce
+    size: 2Gi
+    globalMounts:
+      - path: /appdata

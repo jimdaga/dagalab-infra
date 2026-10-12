@@ -90,6 +90,12 @@ externalSecrets:
       - secretKey: BAZARR_API_KEY   # set by scripts/bazarr-setup.sh; read by the Exportarr sidecar
         key: bazarr
         property: api-key
+  - name: homarr
+    namespace: homarr
+    data:
+      - secretKey: SECRET_ENCRYPTION_KEY   # 64 hex chars; encrypts integration secrets in Homarr's DB. Never rotate (DB unreadable)
+        key: homarr
+        property: encryption-key
   - name: jellyfin-arr
     namespace: media
     data:
