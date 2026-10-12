@@ -1,0 +1,1 @@
+# GatewayClass "envoy" is defined in helm/charts/lan-gateway (one per cluster); this chart only adds a Gateway that uses it.

@@ -1,0 +1,37 @@
+# 1) bootstrap issuer that can only self-sign
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: selfsigned
+spec:
+  selfSigned: {}
+---
+# 2) the root CA certificate (secret lives in cert-manager's namespace, where ClusterIssuers read from)
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: {{ .Values.ca.secretName }}
+  namespace: {{ .Release.Namespace }}
+spec:
+  isCA: true
+  commonName: {{ .Values.ca.commonName | quote }}
+  subject:
+    organizations: ["dagalab"]
+  secretName: {{ .Values.ca.secretName }}
+  duration: {{ .Values.ca.duration }}
+  privateKey:
+    algorithm: ECDSA
+    size: 256
+    rotationPolicy: Never   # keep the same key so devices keep trusting it across renewals
+  issuerRef:
+    kind: ClusterIssuer
+    name: selfsigned
+---
+# 3) issuer that signs leaf certificates with that CA
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: {{ .Values.issuerName }}
+spec:
+  ca:
+    secretName: {{ .Values.ca.secretName }}

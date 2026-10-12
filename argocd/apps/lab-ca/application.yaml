@@ -1,0 +1,32 @@
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: lab-ca
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+  annotations:
+    # Wave -15: needs cert-manager CRDs (wave -20)
+    argocd.argoproj.io/sync-wave: "-15"
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/jimdaga/dagalab-infra.git
+    targetRevision: main
+    path: helm/charts/lab-ca
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: cert-manager
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 3m

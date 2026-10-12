@@ -1,0 +1,8 @@
+# Self-signed root CA for LAN-only names (*.lab.internal). Its private key never leaves the cluster
+# (secret cert-manager/lab-internal-ca). Devices trust it by installing the public ca.crt (see README).
+# Rebuilding the cluster creates a NEW CA: devices would need the new ca.crt.
+ca:
+  commonName: dagalab Lab Root CA
+  duration: 87600h        # 10 years
+  secretName: lab-internal-ca
+issuerName: lab-internal-ca

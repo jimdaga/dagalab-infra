@@ -36,7 +36,8 @@ Lab VLAN 3 on the UniFi Cloud Gateway Ultra: `192.168.3.0/24`.
 | 192.168.3.100 | bastion.lab.internal: Raspberry Pi, Ubuntu (static, `scripts/host-config.sh`; tooling in `bastion/`) |
 | 192.168.3.101–199 | UniFi DHCP pool. UniFi defaults a new network to .6–.254, so shrink it to this range: fixed-IP reservations protect the four hosts, but the API VIP (.10) and the MetalLB pool have no MAC to reserve against. |
 | 192.168.3.200–229 | MetalLB pool. **Must be outside the DHCP pool.** |
-| 192.168.3.200 | Shared gateway (`*.jimdaga.dev`) |
+| 192.168.3.200 | Shared gateway (`*.jimdaga.dev`, parked until the Cloudflare move) |
+| 192.168.3.201 | LAN gateway: `https://<app>.lab.internal` (`helm/charts/lan-gateway`) |
 
 external-dns publishes `<app>.jimdaga.dev → 192.168.3.200` to Cloudflare (DNS-only), so names resolve anywhere but only work on the LAN/VPN.
 
@@ -82,6 +83,8 @@ Two zones, two owners:
 | 0 | radarr | Movies → `/data/movies`; config on Longhorn, API key from Vault |
 | 0 | sonarr | TV → `/data/tv`; config on Longhorn, API key from Vault |
 | 0 | qbittorrent | qBittorrent behind a Gluetun sidecar (PIA OpenVPN, port forwarding); downloads under `/data` on `media-data` |
+| -15 | lab-ca | Homelab root CA + `lab-internal-ca` ClusterIssuer (cert-manager) for `*.lab.internal` |
+| 5 | lan-gateway | LAN-only Envoy Gateway on 192.168.3.201: HTTPS `*.lab.internal` routes to the admin/media UIs; owns the cluster GatewayClass |
 | 5 | shared-gateway | GatewayClass, shared Gateway, wildcard cert, HTTPRoutes for UIs |
 
 metrics-server is bundled by RKE2, so it isn't listed here. RKE2's bundled ingress-nginx is disabled.
@@ -91,6 +94,26 @@ Sync waves between child apps work because `argocd/apps/argocd/values.yaml` rest
 ### Why Envoy Gateway
 
 ingress-nginx was retired in March 2026, and Gateway API is where things are headed. Envoy Gateway is a CNCF, Gateway-API-native implementation that doesn't depend on which CNI you run.
+
+## LAN access (`*.lab.internal`)
+
+`https://<app>.lab.internal` for every UI, LAN only, via the Envoy gateway on **192.168.3.201** with a wildcard certificate from the homelab CA (`helm/charts/lab-ca`). HTTP redirects to HTTPS. LAN is trusted: apps that skip auth for local addresses don't prompt through the gateway.
+
+| URL | App |
+|---|---|
+| `torrent.lab.internal` | qBittorrent |
+| `sonarr.lab.internal` / `radarr.lab.internal` / `prowlarr.lab.internal` | *arr apps |
+| `argocd.lab.internal` | Argo CD |
+| `grafana.lab.internal` | Grafana |
+| `longhorn.lab.internal` | Longhorn UI (no auth of its own) |
+| `vault.lab.internal` | Vault UI |
+
+- **DNS:** one UniFi A record per name → `192.168.3.201`. Add a route in `helm/charts/lan-gateway/values.yaml` and a DNS record for each new app.
+- **Trust the CA** once per device. Export it: `kubectl -n cert-manager get secret lab-internal-ca -o jsonpath='{.data.ca\.crt}' | base64 -d > dagalab-lab-ca.crt`
+  - macOS: `sudo security add-trusted-cert -d -r trustRoot -k /Library/Keychains/System.keychain dagalab-lab-ca.crt`
+  - iOS: AirDrop/email the file, install the profile, then Settings → General → About → Certificate Trust Settings → enable it.
+  - Firefox uses its own store unless `security.enterprise_roots.enabled` is on.
+- The CA key lives only in the cluster. A rebuilt cluster mints a new CA (re-trust devices) unless the `cert-manager/lab-internal-ca` secret is restored.
 
 ## Storage
 
@@ -141,7 +164,7 @@ Deploy order, so Jellyfin scans an already clean, ID-tagged library once:
 4. **Jellyfin**:
    - Config/metadata on Longhorn (SQLite: never NFS). `media-data` mounted **read-only**. Transcode dir on node-local `emptyDir`.
    - **Hardware transcoding**: every node is an i7-9700 with UHD 630 (Quick Sync, `i915`, `/dev/dri/renderD128`, `render` GID 991): H.264 + HEVC 8/10-bit, no AV1. Deploy Intel's GPU device plugin (`gpu.intel.com/i915`, shared) so Jellyfin can schedule on any node.
-   - **Local only for now**: LoadBalancer Service on a fixed MetalLB IP (**192.168.3.201**). TVs on the main LAN won't auto-discover across VLANs; enter the server URL once per client.
+   - **Local only for now**: `https://jellyfin.lab.internal` through the LAN gateway (192.168.3.201; add a route in `helm/charts/lan-gateway/values.yaml`). TVs on the main LAN won't auto-discover across VLANs; enter the server URL once per client. TV apps that can't trust the homelab CA can use `http://192.168.3.201` + Host header-free access via a plain-HTTP listener if needed.
    - Libraries: Movies (`/data/movies`), Shows (`/data/tv`), Home Videos (`/data/theme-parks`).
    - Later: `jellyfin.jimdaga.dev` via the shared gateway once the Cloudflare move happens (see TODO).
 
