@@ -136,7 +136,7 @@ Deploy order, so Jellyfin scans an already clean, ID-tagged library once:
    - App settings that live in their databases (root folders, naming, hardlinks, qBittorrent client + categories, Prowlarr app sync) are applied idempotently by `scripts/arr-run.sh scripts/arr-wire.py`; rerun after a rebuild.
    - qBittorrent: auth bypass for the pod network (10.42.0.0/16), automatic torrent management, categories `movies`/`tv` → `/data/downloads/{movies,tv}`.
    - Set folder naming **before** the first import: Radarr `{Movie CleanTitle} ({Release Year}) [tmdbid-{TmdbId}]`, Sonarr `{Series TitleYear} [tvdbid-{TvdbId}]`.
-   - Library-import the existing 202 movies / 21 shows, confirm matches, and let them rename folders + files in that pass.
+   - Existing library imported 2026-10-12 with `scripts/arr-import.py` (plan → add → rescan → rename): 196 movies, 23 shows, all **unmonitored** (importing never downloads; monitor titles individually). Folders/files renamed to the ID format.
    - Settings → Connect → Jellyfin (library refresh on import).
 4. **Jellyfin**:
    - Config/metadata on Longhorn (SQLite: never NFS). `media-data` mounted **read-only**. Transcode dir on node-local `emptyDir`.
@@ -152,4 +152,6 @@ Deploy order, so Jellyfin scans an already clean, ID-tagged library once:
 - [ ] Remote Terraform state
 - [ ] Move `jimdaga.dev` DNS from IONOS to Cloudflare **after the NFL season** (the pick'em web app lives on that domain); then unpark cluster-issuers, external-dns, shared-gateway and expose `jellyfin.jimdaga.dev`
 - [ ] Jellyseerr (request UI for Jellyfin), optional
+- [ ] Radarr: retry `scripts/arr-run.sh scripts/arr-import.py add` for Captain America: The Winter Soldier, Halloween (1978), Killer Klowns from Outer Space (api.radarr.video returned HTTP 500 for these ids on 2026-10-12), then `rename`
+- [ ] Optional: replace Forgetting Sarah Marshall's 2-part CD1/CD2 rip (Radarr can't track multi-part files); Amazon What They Know About Us has no TMDB/TVDB entry and stays unmanaged
 - [ ] Optional: stop `media` renaming the DSM-denied folders (remove "Delete subfolders and files" at the `video` root, re-grant per media folder)
