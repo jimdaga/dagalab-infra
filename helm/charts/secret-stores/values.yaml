@@ -59,3 +59,15 @@ externalSecrets:
       - secretKey: SONARR__AUTH__APIKEY   # Servarr env override for config.xml <ApiKey>
         key: sonarr
         property: api-key
+  - name: homepage
+    namespace: homepage
+    data:
+      - secretKey: HOMEPAGE_VAR_SONARR_KEY   # read-only use by Homepage widgets
+        key: sonarr
+        property: api-key
+      - secretKey: HOMEPAGE_VAR_RADARR_KEY   # read-only use by Homepage widgets
+        key: radarr
+        property: api-key
+      - secretKey: HOMEPAGE_VAR_PROWLARR_KEY   # read-only use by Homepage widgets
+        key: prowlarr
+        property: api-key

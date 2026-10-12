@@ -1,0 +1,171 @@
+# Homepage (gethomepage.dev): LAN dashboard at https://homepage.lab.internal (helm/charts/lan-gateway).
+# All config lives below as files in a ConfigMap; edit here, Argo CD rolls the pod.
+# Widget API keys come from Vault via the `homepage` ExternalSecret (HOMEPAGE_VAR_* env vars).
+# app-template runs values through tpl, so Homepage's {{HOMEPAGE_VAR_X}} placeholders are written as {{ "{{HOMEPAGE_VAR_X}}" }}.
+controllers:
+  homepage:
+    strategy: RollingUpdate
+    containers:
+      app:
+        image:
+          repository: ghcr.io/gethomepage/homepage
+          tag: v2.5.0
+        env:
+          TZ: America/New_York
+          # Homepage refuses requests for hostnames not listed here
+          HOMEPAGE_ALLOWED_HOSTS: homepage.lab.internal
+        envFrom:
+          - secretRef:
+              name: homepage   # HOMEPAGE_VAR_{SONARR,RADARR,PROWLARR}_KEY
+        probes:
+          liveness: &probe
+            enabled: true
+            custom: true
+            spec:
+              httpGet:
+                path: /api/healthcheck
+                port: 3000
+                httpHeaders:
+                  - name: Host
+                    value: homepage.lab.internal
+              periodSeconds: 30
+          readiness: *probe
+        resources:
+          requests:
+            cpu: 20m
+            memory: 128Mi
+          limits:
+            memory: 512Mi
+
+service:
+  app:
+    controller: homepage
+    ports:
+      http:
+        port: 3000
+
+configMaps:
+  config:
+    data:
+      settings.yaml: |
+        title: dagalab
+        theme: dark
+        color: slate
+        headerStyle: clean
+        statusStyle: dot
+        hideVersion: true
+        layout:
+          Media:
+            style: row
+            columns: 4
+          Platform:
+            style: row
+            columns: 4
+
+      services.yaml: |
+        - Media:
+            - qBittorrent:
+                href: https://torrent.lab.internal
+                icon: qbittorrent.png
+                description: Downloads (via PIA VPN)
+                siteMonitor: http://qbittorrent.media.svc.cluster.local:8080
+                widget:
+                  type: qbittorrent
+                  url: http://qbittorrent.media.svc.cluster.local:8080
+                  username: admin   # unused: qBittorrent trusts the pod network
+                  password: unused
+            - Sonarr:
+                href: https://sonarr.lab.internal
+                icon: sonarr.png
+                description: TV
+                siteMonitor: http://sonarr.media.svc.cluster.local:8989/ping
+                widget:
+                  type: sonarr
+                  url: http://sonarr.media.svc.cluster.local:8989
+                  key: "{{ "{{HOMEPAGE_VAR_SONARR_KEY}}" }}"
+            - Radarr:
+                href: https://radarr.lab.internal
+                icon: radarr.png
+                description: Movies
+                siteMonitor: http://radarr.media.svc.cluster.local:7878/ping
+                widget:
+                  type: radarr
+                  url: http://radarr.media.svc.cluster.local:7878
+                  key: "{{ "{{HOMEPAGE_VAR_RADARR_KEY}}" }}"
+            - Prowlarr:
+                href: https://prowlarr.lab.internal
+                icon: prowlarr.png
+                description: Indexers
+                siteMonitor: http://prowlarr.media.svc.cluster.local:9696/ping
+                widget:
+                  type: prowlarr
+                  url: http://prowlarr.media.svc.cluster.local:9696
+                  key: "{{ "{{HOMEPAGE_VAR_PROWLARR_KEY}}" }}"
+        - Platform:
+            - Argo CD:
+                href: https://argocd.lab.internal
+                icon: argo-cd.png
+                description: GitOps
+                siteMonitor: http://argocd-server.argocd.svc.cluster.local/healthz
+            - Grafana:
+                href: https://grafana.lab.internal
+                icon: grafana.png
+                description: Dashboards
+                siteMonitor: http://kube-prometheus-stack-grafana.monitoring.svc.cluster.local/api/health
+            - Longhorn:
+                href: https://longhorn.lab.internal
+                icon: longhorn.png
+                description: Block storage
+                siteMonitor: http://longhorn-frontend.longhorn-system.svc.cluster.local
+            - Vault:
+                href: https://vault.lab.internal
+                icon: vault.png
+                description: Secrets
+                siteMonitor: http://vault-active.vault.svc.cluster.local:8200/v1/sys/health
+
+      bookmarks.yaml: |
+        - Infrastructure:
+            - dagalab-infra:
+                - abbr: GH
+                  href: https://github.com/jimdaga/dagalab-infra
+            - UniFi:
+                - abbr: UI
+                  href: https://192.168.3.1
+            - daga-nas (DSM):
+                - abbr: NAS
+                  href: https://192.168.3.20:5001
+
+      widgets.yaml: |
+        - search:
+            provider: duckduckgo
+            target: _blank
+        - datetime:
+            text_size: md
+            format:
+              dateStyle: medium
+              timeStyle: short
+
+      # unused integrations; present so Homepage doesn't log about missing files
+      docker.yaml: ""
+      kubernetes.yaml: ""
+      custom.css: ""
+      custom.js: ""
+
+persistence:
+  # Homepage writes logs/cache under /app/config, so it's a writable emptyDir with the config files layered on top
+  config-dir:
+    type: emptyDir
+    globalMounts:
+      - path: /app/config
+  config:
+    type: configMap
+    identifier: config
+    globalMounts:
+      - { path: /app/config/settings.yaml,  subPath: settings.yaml,  readOnly: true }
+      - { path: /app/config/services.yaml,  subPath: services.yaml,  readOnly: true }
+      - { path: /app/config/bookmarks.yaml, subPath: bookmarks.yaml, readOnly: true }
+      - { path: /app/config/widgets.yaml,   subPath: widgets.yaml,   readOnly: true }
+      - { path: /app/config/docker.yaml,    subPath: docker.yaml,    readOnly: true }
+      - { path: /app/config/kubernetes.yaml, subPath: kubernetes.yaml, readOnly: true }
+      - { path: /app/config/custom.css,     subPath: custom.css,     readOnly: true }
+      - { path: /app/config/custom.js,      subPath: custom.js,      readOnly: true }

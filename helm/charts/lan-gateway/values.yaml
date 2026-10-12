@@ -16,6 +16,7 @@ certificate:
 # host.lab.internal -> service:port in namespace. LAN is trusted: apps that skip auth for
 # local addresses (the *arr apps, qBittorrent's pod-network bypass) won't prompt via the gateway.
 routes:
+  - { host: homepage, namespace: homepage,        service: homepage,                      port: 3000 }
   - { host: torrent,  namespace: media,           service: qbittorrent,                   port: 8080 }
   - { host: sonarr,   namespace: media,           service: sonarr,                        port: 8989 }
   - { host: radarr,   namespace: media,           service: radarr,                        port: 7878 }

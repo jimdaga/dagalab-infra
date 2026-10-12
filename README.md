@@ -84,6 +84,7 @@ Two zones, two owners:
 | 0 | sonarr | TV → `/data/tv`; config on Longhorn, API key from Vault |
 | 0 | qbittorrent | qBittorrent behind a Gluetun sidecar (PIA OpenVPN, port forwarding); downloads under `/data` on `media-data` |
 | -15 | lab-ca | Homelab root CA + `lab-internal-ca` ClusterIssuer (cert-manager) for `*.lab.internal` |
+| 0 | homepage | LAN dashboard (gethomepage.dev), *arr widgets via Vault API keys |
 | 5 | lan-gateway | LAN-only Envoy Gateway on 192.168.3.201: HTTPS `*.lab.internal` routes to the admin/media UIs; owns the cluster GatewayClass |
 | 5 | shared-gateway | GatewayClass, shared Gateway, wildcard cert, HTTPRoutes for UIs |
 
@@ -101,6 +102,7 @@ ingress-nginx was retired in March 2026, and Gateway API is where things are hea
 
 | URL | App |
 |---|---|
+| `homepage.lab.internal` | Homepage: dashboard linking everything below (config in `argocd/apps/homepage/values.yaml`) |
 | `torrent.lab.internal` | qBittorrent |
 | `sonarr.lab.internal` / `radarr.lab.internal` / `prowlarr.lab.internal` | *arr apps |
 | `argocd.lab.internal` | Argo CD |
