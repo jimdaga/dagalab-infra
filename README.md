@@ -176,6 +176,9 @@ Deploy order, so Jellyfin scans an already clean, ID-tagged library once:
    - Libraries: Movies (`/data/movies`), Shows (`/data/tv`), Home Videos (`/data/theme-parks`).
    - Later: `jellyfin.jimdaga.dev` via the shared gateway once the Cloudflare move happens (see TODO).
 
+5. **Seerr** (`https://seerr.lab.internal`): deployed. `scripts/seerr-setup.sh` signs in with the Jellyfin admin (Seerr admin = Jellyfin `jim`), enables Movies + Shows, adds Radarr/Sonarr (HD-1080p) and stores Seerr's API key in Vault `secret/seerr`. Household members sign in with their Jellyfin accounts; approved requests are monitored + searched by Radarr/Sonarr.
+   - Setup order after a rebuild: `vault-bootstrap.sh` → `arr-run.sh arr-wire.py` → `jellyfin-setup.sh` → `seerr-setup.sh` (all idempotent).
+
 ## TODO
 
 - [ ] kube-vip for an HA API endpoint (192.168.3.10)

@@ -20,5 +20,6 @@ for _ in $(seq 1 30); do curl -s -o /dev/null http://127.0.0.1:18096/health && b
 keys=$(python3 "$(dirname "$0")/jellyfin-setup.py" --emit-keys "$@")   # e.g. --rotate=homepage
 hk=$(sed -n 's/^KEY_homepage=//p' <<<"$keys"); sk=$(sed -n 's/^KEY_seerr=//p' <<<"$keys")
 [[ -n "$hk" && -n "$sk" ]] || { echo "API keys missing" >&2; exit 1; }
-v kv patch secret/jellyfin homepage-key="$hk" seerr-key="$sk" >/dev/null
+# rewrite the whole secret so fields for revoked keys disappear
+v kv put secret/jellyfin admin-user="$JF_USER" admin-password="$JF_PASSWORD" homepage-key="$hk" seerr-key="$sk" >/dev/null
 echo "stored Jellyfin API keys in secret/jellyfin" >&2

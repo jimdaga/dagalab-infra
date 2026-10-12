@@ -86,6 +86,10 @@ configMaps:
                 icon: jellyseerr.png
                 description: Requests
                 siteMonitor: http://seerr.media.svc.cluster.local:5055/api/v1/status
+                widget:
+                  type: jellyseerr   # Seerr keeps the Jellyseerr/Overseerr API
+                  url: http://seerr.media.svc.cluster.local:5055
+                  key: "{{ "{{HOMEPAGE_VAR_SEERR_KEY}}" }}"
             - qBittorrent:
                 href: https://torrent.lab.internal
                 icon: qbittorrent.png

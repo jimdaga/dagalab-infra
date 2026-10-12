@@ -74,3 +74,6 @@ externalSecrets:
       - secretKey: HOMEPAGE_VAR_JELLYFIN_KEY   # Jellyfin API key "homepage" (scripts/jellyfin-setup.sh)
         key: jellyfin
         property: homepage-key
+      - secretKey: HOMEPAGE_VAR_SEERR_KEY   # Seerr API key (scripts/seerr-setup.sh)
+        key: seerr
+        property: api-key

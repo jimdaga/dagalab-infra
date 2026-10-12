@@ -88,6 +88,10 @@ log(f'library scan started: {st}')
 # 6) API keys for other apps
 st, keys = call('GET', '/Auth/Keys', token=T)
 items = {k['AppName']: k['AccessToken'] for k in keys.get('Items', [])}
+MANAGED = {'homepage', 'seerr'}   # keys this script has ever created; never touch keys other apps made (e.g. Seerr's own "Seerr")
+for app in [a for a in items if a in MANAGED and a not in KEY_APPS]:   # revoke our keys no app uses any more
+    st, _ = call('DELETE', f'/Auth/Keys/{items.pop(app)}', token=T)
+    log(f'api key {app}: no longer used, revoked ({st})')
 for app in ROTATE:
     if app in items:
         st, _ = call('DELETE', f'/Auth/Keys/{items.pop(app)}', token=T)
