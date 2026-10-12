@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# First-run setup for Homarr (trial): admin user, board, integrations, app links. Run once after it's deployed.
+# First-run setup for Homarr (trial): admin user, board, integrations, app links, then the board layout (homarr-board.py).
 #   VAULT_TOKEN=<root or admin token> ./scripts/homarr-setup.sh
 # secret/homarr: encryption-key (pre-created), admin-user, admin-password (generated here), api-key (REST API).
 set -euo pipefail
@@ -24,3 +24,7 @@ if [[ -n "$api" ]]; then
   v kv patch secret/homarr api-key="$api" >/dev/null
   echo "stored Homarr API key in secret/homarr" >&2
 fi
+
+# board layout (rows by purpose, launchers, bookmarks, icons, weather); re-runnable on its own
+export HOMARR_API_KEY=$(v kv get -field=api-key secret/homarr)
+python3 "$(dirname "$0")/homarr-board.py"
