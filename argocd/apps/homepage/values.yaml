@@ -20,7 +20,7 @@ controllers:
           HOMEPAGE_ALLOWED_HOSTS: homepage.lab.internal
         envFrom:
           - secretRef:
-              name: homepage   # HOMEPAGE_VAR_{SONARR,RADARR,PROWLARR,JELLYFIN,SEERR,GLUETUN}_KEY
+              name: homepage   # HOMEPAGE_VAR_{SONARR,RADARR,PROWLARR,JELLYFIN,SEERR,GLUETUN,BAZARR}_KEY
         probes:
           liveness: &probe
             enabled: true
@@ -171,6 +171,17 @@ configMaps:
                   type: radarr
                   url: http://radarr.media.svc.cluster.local:7878
                   key: "{{ "{{HOMEPAGE_VAR_RADARR_KEY}}" }}"
+            - Bazarr:
+                href: https://bazarr.lab.internal
+                icon: bazarr.png
+                description: Subtitles
+                namespace: media
+                app: bazarr
+                siteMonitor: http://bazarr.media.svc.cluster.local:6767
+                widget:
+                  type: bazarr   # missing episode / movie subtitles
+                  url: http://bazarr.media.svc.cluster.local:6767
+                  key: "{{ "{{HOMEPAGE_VAR_BAZARR_KEY}}" }}"
         - Downloads:
             - qBittorrent:
                 href: https://torrent.lab.internal

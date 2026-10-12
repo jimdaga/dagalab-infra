@@ -31,6 +31,24 @@ controllers:
             memory: 256Mi
           limits:
             memory: 1Gi
+      # Exportarr: subtitle coverage + health metrics, scraped via the ServiceMonitor below
+      exportarr:
+        image:
+          repository: ghcr.io/onedr0p/exportarr
+          tag: v2.3.0
+        args: ["bazarr"]
+        env:
+          PORT: "9707"
+          URL: http://localhost:6767
+          APIKEY:
+            valueFrom:
+              secretKeyRef: {name: bazarr, key: BAZARR_API_KEY}
+        resources:
+          requests:
+            cpu: 10m
+            memory: 32Mi
+          limits:
+            memory: 128Mi
 
 service:
   app:
@@ -38,6 +56,18 @@ service:
     ports:
       http:
         port: 6767
+      metrics:
+        port: 9707
+
+serviceMonitor:
+  app:
+    service:
+      identifier: app
+    endpoints:
+      - port: metrics
+        path: /metrics
+        interval: 2m
+        scrapeTimeout: 60s
 
 persistence:
   # SQLite config DB: Longhorn, never NFS

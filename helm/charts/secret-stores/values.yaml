@@ -74,6 +74,9 @@ externalSecrets:
       - secretKey: HOMEPAGE_VAR_JELLYFIN_KEY   # Jellyfin API key "homepage" (scripts/jellyfin-setup.sh)
         key: jellyfin
         property: homepage-key
+      - secretKey: HOMEPAGE_VAR_BAZARR_KEY   # scripts/bazarr-setup.sh
+        key: bazarr
+        property: api-key
       - secretKey: HOMEPAGE_VAR_SEERR_KEY   # Seerr API key (scripts/seerr-setup.sh)
         key: seerr
         property: api-key
@@ -81,6 +84,12 @@ externalSecrets:
         key: gluetun
         property: api-key
   # Gluetun's HTTP control server: every route requires the API key (otherwise legacy routes are open)
+  - name: bazarr
+    namespace: media
+    data:
+      - secretKey: BAZARR_API_KEY   # set by scripts/bazarr-setup.sh; read by the Exportarr sidecar
+        key: bazarr
+        property: api-key
   - name: jellyfin-arr
     namespace: media
     data:
