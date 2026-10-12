@@ -123,7 +123,9 @@ for name, a in APPS.items():
                           'onEpisodeFileDeleteForUpgrade', 'onMovieAdded', 'onMovieDelete', 'onMovieFileDelete', 'onMovieFileDeleteForUpgrade')
               if e in jf and jf.get('supports' + e[0].upper() + e[1:], False)]
     cur = {f['name']: f.get('value') for f in jf['fields']}
-    if jf.get('id') and all(cur.get(n) == v for n, v in jwant.items()) and all(jf.get(e) for e in events):
+    # the API returns the stored key masked, so it can't be compared: after jellyfin-setup.sh --rotate=arr, delete the
+    # Jellyfin connection in Sonarr/Radarr and rerun this to re-create it with the new key
+    if jf.get('id') and all(cur.get(n) == v for n, v in jwant.items() if n != 'apiKey') and all(jf.get(e) for e in events):
         print('   Jellyfin connection: present')
     else:
         jf.update(name='Jellyfin', **{e: True for e in events})
