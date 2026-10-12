@@ -22,8 +22,10 @@ SEED = {
 }
 # Seed everything that's finished: only downloads are queued (3 at a time); no cap on active seeding,
 # no global stop (torrents without a per-tracker goal seed indefinitely). Stop (not remove) at a goal so the *arr apps clean up.
+# Stalled downloads must keep counting toward the 3: private trackers cap concurrent downloads per account
+# (TorrentLeech answers "torrents limit reached"), so starting every queued torrent at once gets them all refused.
 QBT_PREFS = dict(queueing_enabled=True, max_active_downloads=3, max_active_uploads=-1, max_active_torrents=-1,
-                 dont_count_slow_torrents=True, max_ratio_enabled=False, max_seeding_time_enabled=False, max_ratio_act=0)
+                 dont_count_slow_torrents=False, max_ratio_enabled=False, max_seeding_time_enabled=False, max_ratio_act=0)
 
 def call(base, key, method, path, body=None):
     req = urllib.request.Request(base + path, method=method, headers={'X-Api-Key': key, 'Content-Type': 'application/json'},
