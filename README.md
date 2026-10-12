@@ -108,7 +108,7 @@ ingress-nginx was retired in March 2026, and Gateway API is where things are hea
 |---|---|
 | `jellyfin.lab.internal` | Jellyfin (also plain `http://` for TV apps) |
 | `seerr.lab.internal` | Seerr (requests) |
-| `homepage.lab.internal` | Homepage: dashboard linking everything below (config in `argocd/apps/homepage/values.yaml`) |
+| `homepage.lab.internal` | Homepage: dashboard linking everything below, with cluster/node CPU+memory and pod status (read-only ClusterRole), Longhorn usage, Sonarr/Radarr release calendar, VPN status (Gluetun control server, API key from Vault `secret/gluetun`). Config in `argocd/apps/homepage/values.yaml` |
 | `torrent.lab.internal` | qBittorrent |
 | `sonarr.lab.internal` / `radarr.lab.internal` / `prowlarr.lab.internal` | *arr apps |
 | `argocd.lab.internal` | Argo CD |

@@ -5,6 +5,10 @@
 controllers:
   homepage:
     strategy: RollingUpdate
+    serviceAccount:
+      identifier: homepage
+    pod:
+      automountServiceAccountToken: true   # kubernetes integration: node/pod stats
     containers:
       app:
         image:
@@ -16,7 +20,7 @@ controllers:
           HOMEPAGE_ALLOWED_HOSTS: homepage.lab.internal
         envFrom:
           - secretRef:
-              name: homepage   # HOMEPAGE_VAR_{SONARR,RADARR,PROWLARR}_KEY
+              name: homepage   # HOMEPAGE_VAR_{SONARR,RADARR,PROWLARR,JELLYFIN,SEERR,GLUETUN}_KEY
         probes:
           liveness: &probe
             enabled: true
@@ -37,6 +41,28 @@ controllers:
           limits:
             memory: 512Mi
 
+# Read-only cluster access for the kubernetes widget + per-tile pod status
+serviceAccount:
+  homepage: {}
+rbac:
+  roles:
+    homepage:
+      type: ClusterRole
+      rules:
+        - apiGroups: [""]
+          resources: [namespaces, pods, nodes]
+          verbs: [get, list]
+        - apiGroups: [metrics.k8s.io]
+          resources: [nodes, pods]
+          verbs: [get, list]
+  bindings:
+    homepage:
+      type: ClusterRoleBinding
+      roleRef:
+        identifier: homepage
+      subjects:
+        - identifier: homepage
+
 service:
   app:
     controller: homepage
@@ -49,18 +75,44 @@ configMaps:
     data:
       settings.yaml: |
         title: dagalab
+        favicon: https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/png/homepage.png
         theme: dark
         color: slate
-        headerStyle: clean
+        background:
+          image: https://images.unsplash.com/photo-1519681393784-d120267933ba?auto=format&fit=crop&w=2560&q=80
+          blur: sm
+          saturate: 60
+          brightness: 50
+          opacity: 60
+        cardBlur: md
+        headerStyle: boxed
         statusStyle: dot
         hideVersion: true
+        useEqualHeights: true
+        showStats: false        # per-tile CPU/memory appears on hover-expand ("expand" below)
+        quicklaunch:
+          searchDescriptions: true
+          hideInternetSearch: false
         layout:
           Media:
             style: row
             columns: 3
+            icon: mdi-play-box-multiple
+          Downloads:
+            style: row
+            columns: 3
+            icon: mdi-download-network
+          Upcoming:
+            style: row
+            columns: 1
+            icon: mdi-calendar-star
           Platform:
             style: row
             columns: 4
+            icon: mdi-kubernetes
+
+      kubernetes.yaml: |
+        mode: cluster
 
       services.yaml: |
         - Media:
@@ -68,6 +120,8 @@ configMaps:
                 href: https://jellyfin.lab.internal
                 icon: jellyfin.png
                 description: Watch
+                namespace: media
+                app: jellyfin
                 siteMonitor: http://jellyfin.media.svc.cluster.local:8096/health
                 # Homepage's built-in jellyfin widget still calls /emby/...?api_key=, which Jellyfin 12 rejects;
                 # customapi sends the key in the header Jellyfin 12 accepts (and keeps it out of URLs/logs).
@@ -85,25 +139,19 @@ configMaps:
                 href: https://seerr.lab.internal
                 icon: jellyseerr.png
                 description: Requests
+                namespace: media
+                app: seerr
                 siteMonitor: http://seerr.media.svc.cluster.local:5055/api/v1/status
                 widget:
                   type: jellyseerr   # Seerr keeps the Jellyseerr/Overseerr API
                   url: http://seerr.media.svc.cluster.local:5055
                   key: "{{ "{{HOMEPAGE_VAR_SEERR_KEY}}" }}"
-            - qBittorrent:
-                href: https://torrent.lab.internal
-                icon: qbittorrent.png
-                description: Downloads (via PIA VPN)
-                siteMonitor: http://qbittorrent.media.svc.cluster.local:8080
-                widget:
-                  type: qbittorrent
-                  url: http://qbittorrent.media.svc.cluster.local:8080
-                  username: admin   # unused: qBittorrent trusts the pod network
-                  password: unused
             - Sonarr:
                 href: https://sonarr.lab.internal
                 icon: sonarr.png
                 description: TV
+                namespace: media
+                app: sonarr
                 siteMonitor: http://sonarr.media.svc.cluster.local:8989/ping
                 widget:
                   type: sonarr
@@ -113,55 +161,127 @@ configMaps:
                 href: https://radarr.lab.internal
                 icon: radarr.png
                 description: Movies
+                namespace: media
+                app: radarr
                 siteMonitor: http://radarr.media.svc.cluster.local:7878/ping
                 widget:
                   type: radarr
                   url: http://radarr.media.svc.cluster.local:7878
                   key: "{{ "{{HOMEPAGE_VAR_RADARR_KEY}}" }}"
+        - Downloads:
+            - qBittorrent:
+                href: https://torrent.lab.internal
+                icon: qbittorrent.png
+                description: Torrents
+                namespace: media
+                app: qbittorrent
+                siteMonitor: http://qbittorrent.media.svc.cluster.local:8080
+                widget:
+                  type: qbittorrent
+                  url: http://qbittorrent.media.svc.cluster.local:8080
+                  username: admin   # unused: qBittorrent trusts the pod network
+                  password: unused
+                  enableLeechProgress: true
+            - VPN:
+                href: https://torrent.lab.internal
+                icon: gluetun.png
+                description: PIA via Gluetun (qBittorrent's kill switch)
+                widget:
+                  type: gluetun
+                  url: http://qbittorrent.media.svc.cluster.local:8000
+                  key: "{{ "{{HOMEPAGE_VAR_GLUETUN_KEY}}" }}"
+                  version: 2
+                  fields: [public_ip, country, port_forwarded]
             - Prowlarr:
                 href: https://prowlarr.lab.internal
                 icon: prowlarr.png
                 description: Indexers
+                namespace: media
+                app: prowlarr
                 siteMonitor: http://prowlarr.media.svc.cluster.local:9696/ping
                 widget:
                   type: prowlarr
                   url: http://prowlarr.media.svc.cluster.local:9696
                   key: "{{ "{{HOMEPAGE_VAR_PROWLARR_KEY}}" }}"
+        - Upcoming:
+            - Releases:
+                icon: mdi-calendar-month
+                widget:
+                  type: calendar
+                  view: agenda
+                  maxEvents: 12
+                  showTime: true
+                  previousDays: 1
+                  integrations:
+                    - type: sonarr
+                      service_group: Media
+                      service_name: Sonarr
+                      color: teal
+                    - type: radarr
+                      service_group: Media
+                      service_name: Radarr
+                      color: amber
         - Platform:
             - Argo CD:
                 href: https://argocd.lab.internal
                 icon: argo-cd.png
                 description: GitOps
+                namespace: argocd
+                app: argocd-server
                 siteMonitor: http://argocd-server.argocd.svc.cluster.local/healthz
             - Grafana:
                 href: https://grafana.lab.internal
                 icon: grafana.png
                 description: Dashboards
+                namespace: monitoring
+                app: grafana
                 siteMonitor: http://kube-prometheus-stack-grafana.monitoring.svc.cluster.local/api/health
             - Longhorn:
                 href: https://longhorn.lab.internal
                 icon: longhorn.png
                 description: Block storage
+                namespace: longhorn-system
+                podSelector: app=longhorn-ui
                 siteMonitor: http://longhorn-frontend.longhorn-system.svc.cluster.local
             - Vault:
                 href: https://vault.lab.internal
                 icon: vault.png
                 description: Secrets
+                namespace: vault
+                app: vault
                 siteMonitor: http://vault-active.vault.svc.cluster.local:8200/v1/sys/health
 
       bookmarks.yaml: |
         - Infrastructure:
             - dagalab-infra:
-                - abbr: GH
+                - icon: github.png
                   href: https://github.com/jimdaga/dagalab-infra
             - UniFi:
-                - abbr: UI
+                - icon: ubiquiti-unifi.png
                   href: https://192.168.3.1
             - daga-nas (DSM):
-                - abbr: NAS
+                - icon: synology-dsm.png
                   href: https://192.168.3.20:5001
 
       widgets.yaml: |
+        - kubernetes:
+            cluster:
+              show: true
+              cpu: true
+              memory: true
+              showLabel: true
+              label: dagalab
+            nodes:
+              show: true
+              cpu: true
+              memory: true
+              showLabel: true
+        - longhorn:
+            expanded: true
+            total: true
+            labels: true
+            nodes: true
+            url: http://longhorn-frontend.longhorn-system.svc.cluster.local
         - search:
             provider: duckduckgo
             target: _blank
@@ -173,7 +293,6 @@ configMaps:
 
       # unused integrations; present so Homepage doesn't log about missing files
       docker.yaml: ""
-      kubernetes.yaml: ""
       custom.css: ""
       custom.js: ""
 

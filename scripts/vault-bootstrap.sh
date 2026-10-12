@@ -61,7 +61,7 @@ fi
 
 # *arr API keys: generated here so Argo-deployed apps start with a known key (PROWLARR__AUTH__APIKEY etc.)
 # and can be wired to each other over their APIs. Never overwritten once present.
-for app in prowlarr radarr sonarr; do
+for app in prowlarr radarr sonarr gluetun; do   # gluetun: API key for its HTTP control server (VPN status)
   if ! exists "$app"; then
     v kv put "secret/$app" api-key="$(openssl rand -hex 16)" >/dev/null
     echo "generated secret/$app api-key" >&2

@@ -31,12 +31,15 @@ controllers:
             /bin/sh -c 'wget -O- --retry-connrefused --post-data
             "json={\"listen_port\":{{ "{{PORTS}}" }}}"
             http://127.0.0.1:8080/api/v2/app/setPreferences 2>&1'
-          # Let the Web UI through the firewall (port-forward / Service traffic)
-          FIREWALL_INPUT_PORTS: "8080"
+          # Let the Web UI (8080) and Gluetun's control server (8000, API-key protected; Homepage VPN widget)
+          # through the firewall (Service traffic)
+          FIREWALL_INPUT_PORTS: "8080,8000"
           TZ: America/New_York
         envFrom:
           - secretRef:
               name: pia   # OPENVPN_USER / OPENVPN_PASSWORD, from secret-stores
+          - secretRef:
+              name: gluetun-control   # HTTP_CONTROL_SERVER_AUTH_DEFAULT_ROLE (API key from Vault secret/gluetun)
         securityContext:
           capabilities:
             add:
@@ -59,6 +62,8 @@ service:
     ports:
       http:
         port: 8080
+      gluetun:
+        port: 8000   # Gluetun control server (VPN status), API key required
 
 persistence:
   config:
