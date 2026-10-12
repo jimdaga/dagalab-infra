@@ -1,0 +1,16 @@
+# One shared NFS share for every media app, so downloads and the library sit on the same
+# filesystem and imports can hardlink. Apps mount the `media-data` claim at /data.
+#
+# The PV's server/path are immutable: after changing them, delete the PVC + PV (data on the NAS
+# is untouched, reclaim policy is Retain) and let Argo CD recreate them.
+nfs:
+  server: 192.168.3.21          # daga-nas port 2, reserved for Kubernetes NFS
+  path: /volume2/video          # TODO: interim share; needs an NFS rule for 192.168.3.11-13 (not exported yet)
+  mountOptions:
+    - nfsvers=4.1
+    - hard
+    - noatime
+
+volumeName: media-data          # PV (cluster-scoped)
+claimName: media-data           # PVC in the release namespace (media)
+size: 1Ti                       # nominal; NFS doesn't enforce it

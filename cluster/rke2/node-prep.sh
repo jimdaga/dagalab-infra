@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# Ubuntu 26.04 node prep for RKE2 + Longhorn + synology-csi. Run with sudo on each node before installing RKE2.
+# Ubuntu 26.04 node prep for RKE2 + Longhorn + NFS mounts. Run with sudo on each node before installing RKE2.
 # Idempotent; safe to re-run.
 set -euo pipefail
 [[ $EUID -eq 0 ]] || { echo "run with sudo" >&2; exit 1; }
 
-# Longhorn + synology-csi: iSCSI initiator, NFS client (RWX volumes), encryption + device-mapper tooling
+# Longhorn: iSCSI initiator + NFS client (RWX volumes); NFS client also for the media share, encryption + device-mapper tooling
 apt-get update -qq
 apt-get install -y -qq open-iscsi nfs-common cryptsetup dmsetup
 systemctl enable --now iscsid

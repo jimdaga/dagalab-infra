@@ -9,7 +9,6 @@
 #        [VAULT_ADMIN_USER=<name> VAULT_ADMIN_PASSWORD=<pw>] \
 #        [CF_API_TOKEN=<token>] \
 #        [GRAFANA_ADMIN_PASSWORD=<pw>]   (generated if unset and secret/grafana doesn't exist yet) \
-#        [SYNOLOGY_HOST=<dsm hostname> SYNOLOGY_USERNAME=<csi user> SYNOLOGY_PASSWORD=<pw>] \
 #        ./scripts/vault-bootstrap.sh
 set -euo pipefail
 
@@ -57,10 +56,4 @@ if [[ -n "${GRAFANA_ADMIN_PASSWORD:-}" ]]; then
 elif ! exists grafana; then
   v kv put secret/grafana admin-user=admin admin-password="$(openssl rand -base64 24)"
   echo "generated secret/grafana; read it with: vault kv get secret/grafana" >&2
-fi
-
-if [[ -n "${SYNOLOGY_HOST:-}" && -n "${SYNOLOGY_USERNAME:-}" && -n "${SYNOLOGY_PASSWORD:-}" ]]; then
-  v kv put secret/synology host="$SYNOLOGY_HOST" username="$SYNOLOGY_USERNAME" password="$SYNOLOGY_PASSWORD"
-else
-  echo "skip secret/synology: set SYNOLOGY_HOST, SYNOLOGY_USERNAME, SYNOLOGY_PASSWORD" >&2
 fi

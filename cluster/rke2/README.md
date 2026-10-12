@@ -14,7 +14,7 @@ Three identical bare-metal nodes (8 cores, 30 GB RAM, 512 GB SSD, Ubuntu 26.04 L
    `sudo lvextend -r -l +100%FREE /dev/ubuntu-vg/ubuntu-lv`
 2. Set the hostname, domain, and static IP: `sudo ./scripts/host-config.sh dagakube0N 192.168.3.1N` (from the repo root).
 3. Run `sudo ./cluster/rke2/node-prep.sh`. It:
-   - installs Longhorn/synology-csi prerequisites (open-iscsi, nfs-common, cryptsetup), enables iscsid, and loads `iscsi_tcp` / `dm_crypt`
+   - installs Longhorn and NFS prerequisites (open-iscsi, nfs-common, cryptsetup), enables iscsid, and loads `iscsi_tcp` / `dm_crypt`
    - disables multipathd (no SAN; it interferes with Longhorn devices)
    - disables ufw, which conflicts with Canal
    - turns swap off and removes `/swap.img`

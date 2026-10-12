@@ -76,14 +76,12 @@ persistence:
       qbittorrent:
         gluetun:
           - path: /dev/net/tun
-  # Downloads live inside the media share (/data/downloads) so the *arr apps can hardlink on import;
+  # Downloads live inside the shared media claim (/data/downloads) so the *arr apps can hardlink on import;
   # Synology shares are separate Btrfs subvolumes, so cross-share imports would be copies.
-  # The video share is interim: swap `path` when it's consolidated into a media share (in-pod paths stay).
-  # Mounted by name; after the NAS re-IP only the DNS record changes (restart the pod to remount).
+  # NAS IP/export are set once in helm/charts/media-storage (NFS on daga-nas port 2, 192.168.3.21).
   data:
-    type: nfs
-    server: daga-nas.lab.internal
-    path: /volume2/video   # TODO: NFS rule for 192.168.3.0/24 + create downloads/ once the RAID repair finishes
+    type: persistentVolumeClaim
+    existingClaim: media-data
     advancedMounts:
       qbittorrent:
         app:

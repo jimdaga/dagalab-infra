@@ -31,10 +31,11 @@ Lab VLAN 3 on the UniFi Cloud Gateway Ultra: `192.168.3.0/24`.
 | 192.168.3.1 | Gateway |
 | 192.168.3.10 | Reserved: Kubernetes API VIP (future kube-vip), `k8s.lab.internal` |
 | 192.168.3.11–13 | dagakube01–03.lab.internal (static, `scripts/host-config.sh`) |
+| 192.168.3.20 | daga-nas.lab.internal: Synology DS420+ port 1 (DSM, SMB) |
+| 192.168.3.21 | daga-nas port 2: **NFS for Kubernetes** (`helm/charts/media-storage`) |
 | 192.168.3.100 | bastion.lab.internal: Raspberry Pi, Ubuntu (static, `scripts/host-config.sh`; tooling in `bastion/`) |
 | 192.168.3.101–199 | UniFi DHCP pool. UniFi defaults a new network to .6–.254, so shrink it to this range: fixed-IP reservations protect the four hosts, but the API VIP (.10) and the MetalLB pool have no MAC to reserve against. |
 | 192.168.3.200–229 | MetalLB pool. **Must be outside the DHCP pool.** |
-| 192.168.3.207 | daga-nas (Synology, static). Inside the MetalLB range, so it's excluded from the pool; TODO: move it below .100 |
 | 192.168.3.200 | Shared gateway (`*.jimdaga.dev`) |
 
 external-dns publishes `<app>.jimdaga.dev → 192.168.3.200` to Cloudflare (DNS-only), so names resolve anywhere but only work on the LAN/VPN.
@@ -76,8 +77,8 @@ Two zones, two owners:
 | 0 | cluster-issuers | Let's Encrypt staging + prod via Cloudflare DNS-01 |
 | 0 | external-dns | DNS records from HTTPRoutes/Services → Cloudflare |
 | 0 | kube-prometheus-stack | Prometheus, Alertmanager, Grafana |
-| 0 | synology-csi | Synology DSM storage classes: iSCSI (RWO) and NFS (RWX), Delete/Retain |
-| 0 | qbittorrent | qBittorrent behind a Gluetun sidecar (PIA OpenVPN, port forwarding); downloads in daga-nas's video share |
+| -1 | media-storage | Static NFS PV/PVC `media/media-data` → daga-nas `192.168.3.21`, shared by all media apps |
+| 0 | qbittorrent | qBittorrent behind a Gluetun sidecar (PIA OpenVPN, port forwarding); downloads under `/data` on `media-data` |
 | 5 | shared-gateway | GatewayClass, shared Gateway, wildcard cert, HTTPRoutes for UIs |
 
 metrics-server is bundled by RKE2, so it isn't listed here. RKE2's bundled ingress-nginx is disabled.
@@ -90,17 +91,15 @@ ingress-nginx was retired in March 2026, and Gateway API is where things are hea
 
 ## Storage
 
-| StorageClass | Backend | Access | Use for |
+| Storage | Backend | Access | Use for |
 |---|---|---|---|
-| `longhorn` (default) | Node disks, 3 replicas | RWO | Most apps, Vault, Prometheus |
-| `synology-csi-iscsi-delete` / `-retain` | Synology iSCSI LUN | RWO | Big volumes you want on the NAS |
-| `synology-csi-nfs-delete` / `-retain` | Synology NFS share | RWX | Shared/media volumes |
+| `longhorn` StorageClass (default) | Node disks, 3 replicas | RWO | App config/databases, Vault, Prometheus |
+| `media/media-data` PVC (`helm/charts/media-storage`) | Static NFS PV → daga-nas `192.168.3.21` | RWX | One shared media share: torrent downloads + library (Plex, *arr apps) |
 
-Synology prep (DSM):
-- Create a dedicated CSI user in the `administrators` group, with 2FA off for that user.
-- Enable iSCSI, and NFS v4.1 for the NFS classes.
-- Give DSM a certificate valid for the hostname you store in Vault (`SYNOLOGY_HOST`).
-- Ideally put the NAS on VLAN 3 (or give it a VLAN 3 interface), so storage traffic doesn't get routed through the gateway.
+- No Synology CSI driver: the media apps need one existing share (so imports can hardlink), not a new share per PVC.
+- Every media app mounts the same `media-data` claim; the NAS IP and export path live only in `helm/charts/media-storage/values.yaml`.
+- Keep SQLite-backed app config (Plex, *arr) on Longhorn, never on NFS.
+- DSM: enable NFS (v4.1) and restrict each export to the nodes (192.168.3.11–13), not `*`. The share owner must match the containers' `PUID`/`PGID`.
 
 ## Bootstrap
 
@@ -118,7 +117,7 @@ Synology prep (DSM):
    ```bash
    kubectl -n vault exec -ti vault-0 -- vault operator init   # recovery keys + root token → password manager, NOT git
    VAULT_TOKEN=... VAULT_ADMIN_USER=jim VAULT_ADMIN_PASSWORD=... CF_API_TOKEN=... GRAFANA_ADMIN_PASSWORD=... \
-   SYNOLOGY_HOST=... SYNOLOGY_USERNAME=... SYNOLOGY_PASSWORD=... ./scripts/vault-bootstrap.sh
+   ./scripts/vault-bootstrap.sh
    # Every secret is optional and re-runnable; Grafana's password is generated if unset.
    ```
    vault-1/2 join raft and auto-unseal on their own. The remaining waves then sync.
