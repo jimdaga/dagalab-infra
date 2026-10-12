@@ -9,3 +9,7 @@ nodeSelector:
   kubernetes.io/arch: amd64
   intel.feature.node.kubernetes.io/gpu: null   # remove the chart default (Helm merges maps)
 nodeFeatureRule: false
+# Don't mount /dev/dri/by-path symlinks into pods: on these nodes (kernel 7.0) the extra
+# "...platform-simple-framebuffer.0-card" entry makes containerd fail ("mkdir ... file exists").
+# Apps use /dev/dri/renderD128 directly.
+bypathMode: none
