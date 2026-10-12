@@ -1,0 +1,5 @@
+apiVersion: v2
+name: prowlarr-definitions
+description: Custom Prowlarr (Cardigann) indexer definitions, mounted at /config/Definitions/Custom
+type: application
+version: 0.1.0

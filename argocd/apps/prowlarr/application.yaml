@@ -22,6 +22,10 @@ spec:
     - repoURL: https://github.com/jimdaga/dagalab-infra.git
       targetRevision: main
       ref: values
+    # custom indexer definitions (ConfigMap prowlarr-definitions, mounted at /config/Definitions/Custom)
+    - repoURL: https://github.com/jimdaga/dagalab-infra.git
+      targetRevision: main
+      path: helm/charts/prowlarr-definitions
   destination:
     server: https://kubernetes.default.svc
     namespace: media

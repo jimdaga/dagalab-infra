@@ -1,0 +1,8 @@
+# Every definitions/*.yml becomes a key; the prowlarr pod mounts this ConfigMap at /config/Definitions/Custom.
+# Prowlarr reads definitions at startup: restart it after changing one (kubectl -n media rollout restart deploy/prowlarr).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prowlarr-definitions
+data:
+{{ (.Files.Glob "definitions/*.yml").AsConfig | indent 2 }}

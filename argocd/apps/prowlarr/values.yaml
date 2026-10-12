@@ -53,3 +53,10 @@ persistence:
     size: 1Gi
     globalMounts:
       - path: /config
+  # helm/charts/prowlarr-definitions: custom Cardigann definitions (e.g. wigornot). Read at startup only.
+  definitions:
+    type: configMap
+    name: prowlarr-definitions
+    globalMounts:
+      - path: /config/Definitions/Custom
+        readOnly: true

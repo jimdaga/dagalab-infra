@@ -1,0 +1,155 @@
+---
+# Custom Prowlarr (Cardigann) definition for wigornot's Torznab API, replacing the Generic Torznab indexer.
+# Why: wigornot returns HTTP 400 {"q":["Unknown field."]} for any t=tvsearch with a text query, although its caps
+# advertise q,season,ep. Sonarr falls back to exactly that (title + season/ep) whenever a TVDB-ID search comes up
+# empty, and every 400 puts the whole indexer into Prowlarr's failure back-off (RSS and Radarr included).
+# This definition sends ID searches as-is (tvsearch tvdbid+season+ep / movie imdbid, both work) and turns text
+# searches into a plain t=search with the episode in the keywords ("Show S01E02"). Items wigornot publishes
+# without a standard category get Other (8000) instead of being dropped with an "Invalid Release" warning.
+id: wigornot
+name: wigornot
+description: "wigornot (Torznab API, custom definition)"
+language: en-US
+type: private
+encoding: UTF-8
+links:
+  - https://wigornot.com/
+
+caps:
+  # wigornot tags each item with its own 6-digit id(s) plus a standard Newznab id; only the standard ones map.
+  categorymappings:
+    - {id: 2000, cat: Movies, desc: "Movies"}
+    - {id: 2010, cat: Movies/Foreign, desc: "Movies/Foreign"}
+    - {id: 2020, cat: Movies/Other, desc: "Movies/Other"}
+    - {id: 2030, cat: Movies/SD, desc: "Movies/SD"}
+    - {id: 2040, cat: Movies/HD, desc: "Movies/HD"}
+    - {id: 2045, cat: Movies/UHD, desc: "Movies/UHD"}
+    - {id: 2050, cat: Movies/BluRay, desc: "Movies/BluRay"}
+    - {id: 2060, cat: Movies/3D, desc: "Movies/3D"}
+    - {id: 2070, cat: Movies/DVD, desc: "Movies/DVD"}
+    - {id: 2080, cat: Movies/WEB-DL, desc: "Movies/WEB-DL"}
+    - {id: 3000, cat: Audio, desc: "Audio"}
+    - {id: 3010, cat: Audio/MP3, desc: "Audio/MP3"}
+    - {id: 3020, cat: Audio/Video, desc: "Audio/Video"}
+    - {id: 3030, cat: Audio/Audiobook, desc: "Audio/Audiobook"}
+    - {id: 3040, cat: Audio/Lossless, desc: "Audio/Lossless"}
+    - {id: 3050, cat: Audio/Other, desc: "Audio/Other"}
+    - {id: 4000, cat: PC, desc: "PC"}
+    - {id: 4050, cat: PC/Games, desc: "PC/Games"}
+    - {id: 5000, cat: TV, desc: "TV"}
+    - {id: 5010, cat: TV/WEB-DL, desc: "TV/WEB-DL"}
+    - {id: 5020, cat: TV/Foreign, desc: "TV/Foreign"}
+    - {id: 5030, cat: TV/SD, desc: "TV/SD"}
+    - {id: 5040, cat: TV/HD, desc: "TV/HD"}
+    - {id: 5045, cat: TV/UHD, desc: "TV/UHD"}
+    - {id: 5050, cat: TV/Other, desc: "TV/Other"}
+    - {id: 5060, cat: TV/Sport, desc: "TV/Sport"}
+    - {id: 5070, cat: TV/Anime, desc: "TV/Anime"}
+    - {id: 5080, cat: TV/Documentary, desc: "TV/Documentary"}
+    - {id: 6000, cat: XXX, desc: "XXX"}
+    - {id: 7000, cat: Books, desc: "Books"}
+    - {id: 7020, cat: Books/EBook, desc: "Books/EBook"}
+    - {id: 7030, cat: Books/Comics, desc: "Books/Comics"}
+    - {id: 8000, cat: Other, desc: "Other"}
+
+  modes:
+    search: [q]
+    tv-search: [q, season, ep, tvdbid]
+    movie-search: [q, imdbid]
+
+settings:
+  - name: apikey
+    type: text
+    label: API Key
+
+search:
+  paths:
+    - path: torznab/api
+      response:
+        type: xml
+  inputs:
+    # ID searches go through as typed searches (tvsearch tvdbid+season+ep / movie imdbid); anything else is a plain
+    # t=search whose keywords already carry the episode ("Show S01E02"): wigornot rejects q on t=tvsearch.
+    # Prowlarr's template engine can't nest ifs and needs an explicit else, hence three flat conditionals for t.
+    t: "{{ if .Query.TVDBID }}tvsearch{{ else }}{{ end }}{{ if .Query.IMDBID }}movie{{ else }}{{ end }}{{ if or .Query.TVDBID .Query.IMDBID }}{{ else }}search{{ end }}"
+    q: "{{ if or .Query.TVDBID .Query.IMDBID }}{{ else }}{{ .Keywords }}{{ end }}"
+    tvdbid: "{{ .Query.TVDBID }}"
+    imdbid: "{{ .Query.IMDBIDShort }}"   # wigornot wants digits only (0133093, not tt0133093)
+    season: "{{ if .Query.TVDBID }}{{ .Query.Season }}{{ else }}{{ end }}"
+    ep: "{{ if .Query.TVDBID }}{{ .Query.Ep }}{{ else }}{{ end }}"
+    cat: "{{ join .Categories \",\" }}"
+    extended: 1
+    limit: 100
+    apikey: "{{ .Config.apikey }}"
+
+  rows:
+    selector: rss > channel > item
+
+  fields:
+    title:
+      selector: title
+    details:
+      selector: comments
+    download:
+      selector: link
+    infohash:
+      selector: "[name=infohash]"
+      attribute: value
+      optional: true
+    date:
+      selector: pubDate
+    size:
+      selector: size
+    # first standard 4-digit Newznab id among the item's <category> elements, else Other
+    cat1:
+      selector: "category:nth-of-type(1)"
+      optional: true
+    cat2:
+      selector: "category:nth-of-type(2)"
+      optional: true
+    cat3:
+      selector: "category:nth-of-type(3)"
+      optional: true
+    cat4:
+      selector: "category:nth-of-type(4)"
+      optional: true
+    catpick:
+      text: "{{ .Result.cat1 }} {{ .Result.cat2 }} {{ .Result.cat3 }} {{ .Result.cat4 }}"
+      filters:
+        - name: re_replace
+          args: ["^(?:.*?\\b([1-8]0[0-9][05])\\b.*|.*)$", "$1"]
+    category:
+      text: "{{ if .Result.catpick }}{{ .Result.catpick }}{{ else }}8000{{ end }}"
+    grabs:
+      selector: "[name=grabs]"
+      attribute: value
+      optional: true
+    seeders:
+      selector: "[name=seeders]"
+      attribute: value
+      optional: true
+      default: 0
+    leechers:
+      selector: "[name=leechers]"
+      attribute: value
+      optional: true
+      default: 0
+    downloadvolumefactor:
+      selector: "[name=downloadvolumefactor]"
+      attribute: value
+      optional: true
+      default: 1
+    uploadvolumefactor:
+      selector: "[name=uploadvolumefactor]"
+      attribute: value
+      optional: true
+      default: 1
+    minimumratio:
+      selector: "[name=minimumratio]"
+      attribute: value
+      optional: true
+    minimumseedtime:
+      selector: "[name=minimumseedtime]"
+      attribute: value
+      optional: true
+# torznab xml
