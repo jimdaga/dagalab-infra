@@ -284,6 +284,13 @@ configMaps:
             total: true
             labels: true
             nodes: true
+        - openmeteo:   # no API key needed
+            label: Leominster
+            latitude: 42.5274
+            longitude: -71.7563
+            timezone: America/New_York
+            units: imperial
+            cache: 15   # minutes
         - search:
             provider: duckduckgo
             target: _blank
