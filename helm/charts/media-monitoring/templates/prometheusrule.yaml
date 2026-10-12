@@ -1,0 +1,8 @@
+# Rules live in files/rules.yaml, read verbatim, so Helm never parses Prometheus' own label templates.
+# Alertmanager has no receiver yet (Discord to come): alerts show in Grafana/Alertmanager but notify nobody.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: media
+spec:
+{{ .Files.Get "files/rules.yaml" | indent 2 }}

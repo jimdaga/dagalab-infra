@@ -1,0 +1,54 @@
+groups:
+  - name: media
+    rules:
+      - alert: MediaAppUnreachable
+        expr: '{__name__=~"(sonarr|radarr|prowlarr|bazarr)_system_status", namespace="media"} == 0'
+        for: 10m
+        labels: {severity: warning}
+        annotations:
+          summary: "{{ $labels.service }} isn't answering its API"
+          description: "Exportarr can reach the pod but not the app's API for 10 minutes."
+      - alert: MediaMetricsDown
+        expr: 'up{namespace="media", service=~"sonarr|radarr|prowlarr|bazarr|unpackerr"} == 0'
+        for: 10m
+        labels: {severity: warning}
+        annotations:
+          summary: "{{ $labels.service }} metrics endpoint is down"
+          description: "Prometheus can't scrape {{ $labels.pod }} (pod down or Exportarr sidecar failing)."
+      - alert: MediaAppHealthIssue
+        expr: '{__name__=~"(sonarr|radarr|prowlarr)_system_health_issues", namespace="media", message!=""} > 0'
+        for: 1h
+        labels: {severity: warning}
+        annotations:
+          summary: "{{ $labels.service }}: {{ $labels.message }}"
+          description: "Health check ({{ $labels.source }}, {{ $labels.type }}) failing for 1h. {{ $labels.wikiurl }}"
+      # Exportarr v2.3.0's queue metric is buggy: one series labelled with the last item's state, valued at the total.
+      # So no per-state rules (import stuck / stalled) until v3 is released; this uses only the total + history.
+      - alert: MediaQueueNotMoving
+        expr: 'sum by (service) ({__name__=~"(sonarr|radarr)_queue_total", namespace="media"}) > 0 unless on (service) sum by (service) (increase({__name__=~"(sonarr|radarr)_history_total", namespace="media"}[24h])) > 0'
+        for: 1h
+        labels: {severity: warning}
+        annotations:
+          summary: "{{ $labels.service }}: {{ $value }} queued item(s) but no grabs or imports in 24h"
+          description: "Downloads are stuck (stalled torrents, blocked imports, RARs not extracted). Decluttarr should clear most; see Activity > Queue."
+      - alert: MediaShareLowSpace
+        expr: 'min(sonarr_rootfolder_freespace_bytes{namespace="media"}) < 500e9'
+        for: 30m
+        labels: {severity: warning}
+        annotations:
+          summary: "Media share has {{ $value | humanize1024 }}B free"
+          description: "Less than 500 GB free on daga-nas /volume2/video."
+      - alert: UnpackerrExtractionFailed
+        expr: 'unpackerr_gauges{namespace="media", name="failed"} > 0'
+        for: 15m
+        labels: {severity: warning}
+        annotations:
+          summary: "Unpackerr: {{ $value }} extraction(s) failed"
+          description: "A RAR'd download couldn't be extracted (corrupt or password-protected); kubectl -n media logs deploy/unpackerr."
+      - alert: IndexerQueriesFailing
+        expr: 'sum by (indexer) (increase(prowlarr_indexer_failed_queries_total{namespace="media"}[1h])) > 5'
+        for: 30m
+        labels: {severity: warning}
+        annotations:
+          summary: "Indexer {{ $labels.indexer }}: {{ $value | humanize }} failed queries in the last hour"
+          description: "Prowlarr is getting errors from {{ $labels.indexer }} (login, API change, rate limit); the indexer may be in back-off."

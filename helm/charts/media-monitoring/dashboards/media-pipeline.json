@@ -1,0 +1,439 @@
+{
+ "uid": "dagalab-media-pipeline",
+ "title": "Media: pipeline overview",
+ "tags": [
+  "media"
+ ],
+ "timezone": "browser",
+ "schemaVersion": 39,
+ "refresh": "1m",
+ "time": {
+  "from": "now-24h",
+  "to": "now"
+ },
+ "templating": {
+  "list": [
+   {
+    "name": "datasource",
+    "type": "datasource",
+    "query": "prometheus",
+    "current": {},
+    "hide": 0
+   }
+  ]
+ },
+ "panels": [
+  {
+   "type": "row",
+   "title": "Health",
+   "collapsed": false,
+   "panels": [],
+   "gridPos": {
+    "x": 0,
+    "y": 0,
+    "w": 24,
+    "h": 1
+   },
+   "id": 1
+  },
+  {
+   "type": "stat",
+   "title": "Health issues (Sonarr / Radarr / Prowlarr)",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${datasource}"
+   },
+   "targets": [
+    {
+     "expr": "count by (service) ({__name__=~\"(sonarr|radarr|prowlarr)_system_health_issues\", namespace=\"media\", message!=\"\"}) or on() vector(0)",
+     "legendFormat": "{{service}}",
+     "refId": "A"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {},
+    "overrides": []
+   },
+   "options": {
+    "colorMode": "background",
+    "graphMode": "none"
+   },
+   "description": "Number of active health warnings; details in the table",
+   "gridPos": {
+    "x": 0,
+    "y": 1,
+    "w": 6,
+    "h": 5
+   },
+   "id": 2
+  },
+  {
+   "type": "table",
+   "title": "Health issue details",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${datasource}"
+   },
+   "targets": [
+    {
+     "expr": "{__name__=~\"(sonarr|radarr|prowlarr)_system_health_issues\", namespace=\"media\", message!=\"\"}",
+     "legendFormat": "",
+     "refId": "A",
+     "instant": true,
+     "format": "table"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {},
+    "overrides": []
+   },
+   "options": {},
+   "gridPos": {
+    "x": 6,
+    "y": 1,
+    "w": 12,
+    "h": 5
+   },
+   "id": 3
+  },
+  {
+   "type": "stat",
+   "title": "Apps reachable",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${datasource}"
+   },
+   "targets": [
+    {
+     "expr": "{__name__=~\"(sonarr|radarr|prowlarr)_system_status\", namespace=\"media\"}",
+     "legendFormat": "{{service}}",
+     "refId": "A"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {},
+    "overrides": []
+   },
+   "options": {
+    "colorMode": "background",
+    "graphMode": "none"
+   },
+   "gridPos": {
+    "x": 18,
+    "y": 1,
+    "w": 6,
+    "h": 5
+   },
+   "id": 4
+  },
+  {
+   "type": "row",
+   "title": "Downloads",
+   "collapsed": false,
+   "panels": [],
+   "gridPos": {
+    "x": 0,
+    "y": 6,
+    "w": 24,
+    "h": 1
+   },
+   "id": 5
+  },
+  {
+   "type": "timeseries",
+   "title": "Sonarr queue (items)",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${datasource}"
+   },
+   "targets": [
+    {
+     "expr": "sum(sonarr_queue_total{namespace=\"media\"})",
+     "legendFormat": "queued",
+     "refId": "A"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {},
+    "overrides": []
+   },
+   "options": {},
+   "gridPos": {
+    "x": 0,
+    "y": 7,
+    "w": 12,
+    "h": 8
+   },
+   "id": 6,
+   "description": "Total only: Exportarr v2.3.0 mislabels per-state queue series (fixed in unreleased v3)"
+  },
+  {
+   "type": "timeseries",
+   "title": "Radarr queue (items)",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${datasource}"
+   },
+   "targets": [
+    {
+     "expr": "sum(radarr_queue_total{namespace=\"media\"})",
+     "legendFormat": "queued",
+     "refId": "A"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {},
+    "overrides": []
+   },
+   "options": {},
+   "gridPos": {
+    "x": 12,
+    "y": 7,
+    "w": 12,
+    "h": 8
+   },
+   "id": 7,
+   "description": "Total only: Exportarr v2.3.0 mislabels per-state queue series (fixed in unreleased v3)"
+  },
+  {
+   "type": "timeseries",
+   "title": "Unpackerr",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${datasource}"
+   },
+   "targets": [
+    {
+     "expr": "unpackerr_gauges{namespace=\"media\"}",
+     "legendFormat": "{{name}}",
+     "refId": "A"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {},
+    "overrides": []
+   },
+   "options": {},
+   "description": "queued / extracting / extracted / imported / failed (RAR'd releases)",
+   "gridPos": {
+    "x": 0,
+    "y": 15,
+    "w": 12,
+    "h": 8
+   },
+   "id": 8
+  },
+  {
+   "type": "timeseries",
+   "title": "VPN throughput (qBittorrent pod)",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${datasource}"
+   },
+   "targets": [
+    {
+     "expr": "sum(rate(container_network_receive_bytes_total{namespace=\"media\", pod=~\"qbittorrent-.*\"}[5m]))",
+     "legendFormat": "down",
+     "refId": "A"
+    },
+    {
+     "expr": "sum(rate(container_network_transmit_bytes_total{namespace=\"media\", pod=~\"qbittorrent-.*\"}[5m]))",
+     "legendFormat": "up",
+     "refId": "B"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "Bps"
+    },
+    "overrides": []
+   },
+   "options": {},
+   "gridPos": {
+    "x": 12,
+    "y": 15,
+    "w": 12,
+    "h": 8
+   },
+   "id": 9
+  },
+  {
+   "type": "row",
+   "title": "Library & indexers",
+   "collapsed": false,
+   "panels": [],
+   "gridPos": {
+    "x": 0,
+    "y": 23,
+    "w": 24,
+    "h": 1
+   },
+   "id": 10
+  },
+  {
+   "type": "stat",
+   "title": "Missing (monitored)",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${datasource}"
+   },
+   "targets": [
+    {
+     "expr": "sonarr_episode_missing_total{namespace=\"media\"}",
+     "legendFormat": "episodes",
+     "refId": "A"
+    },
+    {
+     "expr": "radarr_movie_missing_total{namespace=\"media\"}",
+     "legendFormat": "movies",
+     "refId": "B"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {},
+    "overrides": []
+   },
+   "options": {},
+   "gridPos": {
+    "x": 0,
+    "y": 24,
+    "w": 6,
+    "h": 6
+   },
+   "id": 11
+  },
+  {
+   "type": "stat",
+   "title": "Free space on the media share",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${datasource}"
+   },
+   "targets": [
+    {
+     "expr": "min(sonarr_rootfolder_freespace_bytes{namespace=\"media\"})",
+     "legendFormat": "free",
+     "refId": "A"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "bytes"
+    },
+    "overrides": []
+   },
+   "options": {},
+   "gridPos": {
+    "x": 6,
+    "y": 24,
+    "w": 6,
+    "h": 6
+   },
+   "id": 12
+  },
+  {
+   "type": "timeseries",
+   "title": "Indexer queries / failures (1h)",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${datasource}"
+   },
+   "targets": [
+    {
+     "expr": "sum by (indexer) (increase(prowlarr_indexer_queries_total{namespace=\"media\"}[1h]))",
+     "legendFormat": "{{indexer}} queries",
+     "refId": "A"
+    },
+    {
+     "expr": "sum by (indexer) (increase(prowlarr_indexer_failed_queries_total{namespace=\"media\"}[1h]))",
+     "legendFormat": "{{indexer}} failed",
+     "refId": "B"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {},
+    "overrides": []
+   },
+   "options": {},
+   "gridPos": {
+    "x": 12,
+    "y": 24,
+    "w": 12,
+    "h": 6
+   },
+   "id": 13
+  },
+  {
+   "type": "row",
+   "title": "Pods",
+   "collapsed": false,
+   "panels": [],
+   "gridPos": {
+    "x": 0,
+    "y": 30,
+    "w": 24,
+    "h": 1
+   },
+   "id": 14
+  },
+  {
+   "type": "timeseries",
+   "title": "Memory (RSS) by container",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${datasource}"
+   },
+   "targets": [
+    {
+     "expr": "sum by (pod, container) (container_memory_rss{namespace=\"media\", container!=\"\", container!=\"POD\"})",
+     "legendFormat": "{{pod}}/{{container}}",
+     "refId": "A"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "bytes"
+    },
+    "overrides": []
+   },
+   "options": {},
+   "description": "RSS, not working set: qBittorrent's working set is mostly reclaimable NFS page cache",
+   "gridPos": {
+    "x": 0,
+    "y": 31,
+    "w": 12,
+    "h": 8
+   },
+   "id": 15
+  },
+  {
+   "type": "timeseries",
+   "title": "CPU by container",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${datasource}"
+   },
+   "targets": [
+    {
+     "expr": "sum by (pod, container) (rate(container_cpu_usage_seconds_total{namespace=\"media\", container!=\"\", container!=\"POD\"}[5m]))",
+     "legendFormat": "{{pod}}/{{container}}",
+     "refId": "A"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "cores"
+    },
+    "overrides": []
+   },
+   "options": {},
+   "gridPos": {
+    "x": 12,
+    "y": 31,
+    "w": 12,
+    "h": 8
+   },
+   "id": 16
+  }
+ ]
+}

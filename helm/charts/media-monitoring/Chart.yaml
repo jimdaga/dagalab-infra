@@ -1,0 +1,5 @@
+apiVersion: v2
+name: media-monitoring
+description: Grafana dashboards and Prometheus alert rules for the media stack (metrics from Exportarr sidecars and Unpackerr)
+type: application
+version: 0.1.0
