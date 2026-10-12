@@ -89,6 +89,7 @@ Two zones, two owners:
 | 0 | qbittorrent | qBittorrent behind a Gluetun sidecar (PIA OpenVPN, port forwarding); downloads under `/data` on `media-data` |
 | -15 | lab-ca | Homelab root CA + `lab-internal-ca` ClusterIssuer (cert-manager) for `*.lab.internal` |
 | 0 | homepage | LAN dashboard (gethomepage.dev), *arr widgets via Vault API keys |
+| 0 | homarr | Trial alternative dashboard (homarr.dev), compared against Homepage; config lives in its DB |
 | 5 | lan-gateway | LAN-only Envoy Gateway on 192.168.3.201: HTTPS `*.lab.internal` routes to the admin/media UIs; owns the cluster GatewayClass |
 | 5 | shared-gateway | GatewayClass, shared Gateway, wildcard cert, HTTPRoutes for UIs |
 
@@ -109,6 +110,7 @@ ingress-nginx was retired in March 2026, and Gateway API is where things are hea
 | `jellyfin.lab.internal` | Jellyfin (also plain `http://` for TV apps) |
 | `seerr.lab.internal` | Seerr (requests) |
 | `homepage.lab.internal` | Homepage: dashboard linking everything below, with cluster/node CPU+memory and pod status (read-only ClusterRole), Longhorn usage, Sonarr/Radarr release calendar, VPN status (Gluetun control server, API key from Vault `secret/gluetun`). Config in `argocd/apps/homepage/values.yaml` |
+| `homarr.lab.internal` | Homarr (trial): same services as Homepage as a drag-and-drop board with live integrations (Jellyfin now playing, Seerr requests, calendar, downloads, VPN, Prowlarr, Bazarr, missing media). Config is in its SQLite DB on Longhorn, **not** in git; seeded once by `scripts/homarr-setup.sh` (admin `jim`, password + API key in Vault `secret/homarr`) |
 | `torrent.lab.internal` | qBittorrent |
 | `sonarr.lab.internal` / `radarr.lab.internal` / `prowlarr.lab.internal` | *arr apps |
 | `argocd.lab.internal` | Argo CD |
@@ -199,6 +201,8 @@ Deploy order, so Jellyfin scans an already clean, ID-tagged library once:
 - [ ] Decluttarr: review its test-run log (`kubectl -n media logs deploy/decluttarr`), then set `test_run: false` in `argocd/apps/decluttarr/values.yaml`
 - [ ] Bazarr: add an OpenSubtitles.com account as a provider (best English coverage; free tier ~20/day)
 - [ ] UniFi DNS: `bazarr.lab.internal` → 192.168.3.201
+- [ ] Dashboard trial: keep Homepage or Homarr, then remove the other (Argo app, lan-gateway route, UniFi record, Vault `secret/homarr` if Homarr goes; Homarr reuses Homepage's Jellyfin key)
+- [ ] UniFi DNS: `homarr.lab.internal` → 192.168.3.201
 - [ ] Exportarr: when v3 is released, bump the sidecars and restore per-state queue panels/alerts (import stuck, stalled) in `helm/charts/media-monitoring`; v2.3.0 mislabels `*_queue_total` (one series, last item's state, value = total)
 - [ ] Optional: replace Forgetting Sarah Marshall's 2-part CD1/CD2 rip (Radarr can't track multi-part files); Amazon What They Know About Us has no TMDB/TVDB entry and stays unmanaged
 - [ ] Optional: stop `media` renaming the DSM-denied folders (remove "Delete subfolders and files" at the `video` root, re-grant per media folder)
