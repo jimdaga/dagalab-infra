@@ -434,6 +434,79 @@
     "h": 8
    },
    "id": 16
+  },
+  {
+   "type": "row",
+   "title": "Subtitles (Bazarr)",
+   "collapsed": false,
+   "panels": [],
+   "id": 17,
+   "gridPos": {
+    "x": 0,
+    "y": 39,
+    "w": 24,
+    "h": 1
+   }
+  },
+  {
+   "type": "timeseries",
+   "title": "Missing English subtitles",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${datasource}"
+   },
+   "id": 18,
+   "description": "Episodes/movies Bazarr still wants subtitles for; falls as Bazarr back-fills",
+   "gridPos": {
+    "x": 0,
+    "y": 40,
+    "w": 12,
+    "h": 8
+   },
+   "fieldConfig": {
+    "defaults": {},
+    "overrides": []
+   },
+   "options": {},
+   "targets": [
+    {
+     "expr": "bazarr_subtitles_missing_total{namespace=\"media\"}",
+     "legendFormat": "all (episodes + movies)",
+     "refId": "A"
+    },
+    {
+     "expr": "bazarr_movie_subtitles_missing_total{namespace=\"media\"}",
+     "legendFormat": "movies",
+     "refId": "B"
+    }
+   ]
+  },
+  {
+   "type": "timeseries",
+   "title": "Subtitles downloaded",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${datasource}"
+   },
+   "id": 19,
+   "gridPos": {
+    "x": 12,
+    "y": 40,
+    "w": 12,
+    "h": 8
+   },
+   "fieldConfig": {
+    "defaults": {},
+    "overrides": []
+   },
+   "options": {},
+   "targets": [
+    {
+     "expr": "bazarr_subtitles_downloaded_total{namespace=\"media\"}",
+     "legendFormat": "total",
+     "refId": "A"
+    }
+   ]
   }
  ]
 }
