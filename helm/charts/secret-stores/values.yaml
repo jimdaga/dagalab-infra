@@ -81,6 +81,12 @@ externalSecrets:
         key: gluetun
         property: api-key
   # Gluetun's HTTP control server: every route requires the API key (otherwise legacy routes are open)
+  - name: jellyfin-arr
+    namespace: media
+    data:
+      - secretKey: JELLYFIN_KEY   # Jellyfin API key "arr" (scripts/jellyfin-setup.sh); read by scripts/arr-run.sh
+        key: jellyfin
+        property: arr-key
   - name: gluetun-control
     namespace: media
     data:

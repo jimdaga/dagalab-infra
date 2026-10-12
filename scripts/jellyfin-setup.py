@@ -13,7 +13,7 @@ EMIT = '--emit-keys' in sys.argv
 ROTATE = [a.split('=', 1)[1] for a in sys.argv if a.startswith('--rotate=')]   # e.g. --rotate=homepage
 AUTH = 'MediaBrowser Client="dagalab-setup", Device="cli", DeviceId="dagalab-setup", Version="1.0"'
 LIBS = [('Movies', 'movies', '/data/movies'), ('Shows', 'tvshows', '/data/tv'), ('Home Videos', 'homevideos', '/data/theme-parks')]
-KEY_APPS = ['homepage', 'seerr']
+KEY_APPS = ['homepage', 'seerr', 'arr']   # arr: Sonarr/Radarr tell Jellyfin to refresh after imports
 
 def log(*a): print(*a, file=sys.stderr, flush=True)
 
@@ -88,7 +88,7 @@ log(f'library scan started: {st}')
 # 6) API keys for other apps
 st, keys = call('GET', '/Auth/Keys', token=T)
 items = {k['AppName']: k['AccessToken'] for k in keys.get('Items', [])}
-MANAGED = {'homepage', 'seerr'}   # keys this script has ever created; never touch keys other apps made (e.g. Seerr's own "Seerr")
+MANAGED = {'homepage', 'seerr', 'arr'}   # keys this script has ever created; never touch keys other apps made (e.g. Seerr's own "Seerr")
 for app in [a for a in items if a in MANAGED and a not in KEY_APPS]:   # revoke our keys no app uses any more
     st, _ = call('DELETE', f'/Auth/Keys/{items.pop(app)}', token=T)
     log(f'api key {app}: no longer used, revoked ({st})')
