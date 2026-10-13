@@ -12,14 +12,15 @@ PROWLARR = dict(url='http://127.0.0.1:19696/api/v1', key=os.environ['PROWLARR_KE
 QBT = 'http://127.0.0.1:18080/api/v2'   # port-forwarded: arrives from localhost, so no login needed...
 QBT_HOST = '127.0.0.1:8080'             # ...as long as the Host header names qBittorrent's own port (else 401)
 
-# Per private tracker: seeding goals, so nothing lands on a hit-and-run list, and Prowlarr priority (lower wins
-# ties between equally good releases; TorrentLeech has the better releases and swarms). qBittorrent stops a torrent when
-# EITHER limit is hit, matching the trackers' "ratio OR time" rules; Sonarr/Radarr then remove it (data stays
-# in the library: imports are hardlinks). Keyed by Prowlarr definition name; trackers = announce hostnames.
-#   TorrentLeech: 1:1 or 10 days -> 1.5 / 14 days.  wigornot: ratio 10 or 1 year (its feed's minimumratio/seedtime).
+# Per private tracker: seeding goals and Prowlarr priority (lower wins ties between equally good releases; TorrentLeech
+# has the better releases and swarms). ratio/minutes None = seed forever (the choice for both, 2026-10-12: well past
+# the trackers' minimums, TorrentLeech 1:1 or 10 days and wigornot ratio 10 or 1 year; costs no extra disk since imports
+# are hardlinks, and TorrentLeech's "torrents limit reached" counts downloads, not seeds). With numbers, qBittorrent stops
+# a torrent when EITHER limit is hit and Sonarr/Radarr then remove it. Keyed by Prowlarr definition name; trackers =
+# announce hostnames.
 TRACKERS = {
-    'torrentleech': dict(ratio=1.5, minutes=14 * 24 * 60,  priority=10, trackers=('torrentleech.org', 'tleechreload.org')),
-    'wigornot':     dict(ratio=10,  minutes=365 * 24 * 60, priority=25, trackers=('wigornot.com',)),
+    'torrentleech': dict(ratio=None, minutes=None, priority=10, trackers=('torrentleech.org', 'tleechreload.org')),
+    'wigornot':     dict(ratio=None, minutes=None, priority=25, trackers=('wigornot.com',)),
 }
 # qBittorrent: seed everything that's finished: only downloads are queued (3 at a time); no cap on active seeding,
 # no global stop (torrents without a per-tracker goal seed indefinitely). Stop (not remove) at a goal so the *arr apps clean up.
@@ -177,7 +178,8 @@ for ix in indexers:
         setf(ix['fields'], n, v)
     ix['priority'] = goal['priority']
     st, r = call(p['url'], p['key'], 'PUT', f'/indexer/{ix["id"]}?forceSave=true', ix)
-    print(f'   seed goal + priority {ix["name"]}: ratio {goal["ratio"]} / {goal["minutes"] // 1440} days, priority {goal["priority"]} (HTTP {st})' if st in (200, 202) else f'   seed goal {ix["name"]} FAILED {st}: {r}')
+    seed = 'forever' if goal['ratio'] is None else f'ratio {goal["ratio"]} / {goal["minutes"] // 1440} days'
+    print(f'   seed goal + priority {ix["name"]}: {seed}, priority {goal["priority"]} (HTTP {st})' if st in (200, 202) else f'   seed goal {ix["name"]} FAILED {st}: {r}')
     ok &= st in (200, 202)
 
 # qBittorrent: preferences + bring torrents grabbed before these goals existed in line with their tracker
@@ -194,13 +196,15 @@ if any(prefs.get(n) != v for n, v in QBT_PREFS.items()):
 else:
     print('   preferences (unlimited seeding, 3 downloads): already set')
 for name, goal in TRACKERS.items():
+    ratio, minutes = (-1 if goal['ratio'] is None else goal['ratio']), (-1 if goal['minutes'] is None else goal['minutes'])   # -1 = no limit
     stale = [t['hash'] for t in qbt('/torrents/info')
              if any(h in (t.get('tracker') or '') for h in goal['trackers'])
-             and (t['ratio_limit'] != goal['ratio'] or t['seeding_time_limit'] != goal['minutes'])]
+             and (t['ratio_limit'] != ratio or t['seeding_time_limit'] != minutes)]
     if stale:
-        qbt('/torrents/setShareLimits', {'hashes': '|'.join(stale), 'ratioLimit': goal['ratio'],
-                                         'seedingTimeLimit': goal['minutes'], 'inactiveSeedingTimeLimit': -2,
+        qbt('/torrents/setShareLimits', {'hashes': '|'.join(stale), 'ratioLimit': ratio,
+                                         'seedingTimeLimit': minutes, 'inactiveSeedingTimeLimit': -2,
                                          'shareLimitAction': 'Default'})   # Default = global max_ratio_act (Stop)
+        qbt('/torrents/start', {'hashes': '|'.join(stale)})   # resume any that already stopped at the old goal
     print(f'   {name} torrents: {len(stale)} share limits updated')
 
 # health
