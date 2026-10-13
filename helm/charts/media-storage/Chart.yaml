@@ -1,5 +1,5 @@
 apiVersion: v2
 name: media-storage
-description: Static NFS volume on daga-nas shared by the media apps (torrent client, Jellyfin, *arr)
+description: "Static NFS volumes on daga-nas: the media share for all media apps, plus Jellyfin trickplay"
 type: application
 version: 0.1.0

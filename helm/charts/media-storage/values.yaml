@@ -14,3 +14,11 @@ nfs:
 volumeName: media-data          # PV (cluster-scoped)
 claimName: media-data           # PVC in the release namespace (media)
 size: 1Ti                       # nominal; NFS doesn't enforce it
+
+# Jellyfin's trickplay (scrub preview) tiles: a dedicated DSM share, mounted over /config/data/trickplay so the
+# images live on the NAS while the media share stays read-only to Jellyfin. Plain JPEGs; Jellyfin can regenerate them.
+trickplay:
+  path: /volume2/trickplay      # NFS rule: 192.168.3.11-13 only, RW; writable by DSM user media (1029:100)
+  volumeName: jellyfin-trickplay
+  claimName: jellyfin-trickplay
+  size: 200Gi                   # nominal
