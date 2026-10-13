@@ -82,6 +82,18 @@ for name, ctype, path in LIBS:
     q = urllib.parse.urlencode({'name': name, 'collectionType': ctype, 'refreshLibrary': 'false'})
     st, r = call('POST', f'/Library/VirtualFolders?{q}', {'LibraryOptions': {'PathInfos': [{'Path': path}], 'EnableRealtimeMonitor': False}}, token=T)
     log(f'library {name} ({ctype}) -> {path}: {st} {r if st >= 300 else ""}')
+# trickplay (scrub previews) saved next to the media on the NAS, not in /config; no NFO files written into media folders
+LIB_OPTS = {'EnableTrickplayImageExtraction': True, 'ExtractTrickplayImagesDuringLibraryScan': True,
+            'SaveTrickplayWithMedia': True, 'MetadataSavers': []}
+st, folders = call('GET', '/Library/VirtualFolders', token=T)
+for f in folders:
+    if f['Name'] not in ('Movies', 'Shows'): continue
+    o = f['LibraryOptions']
+    if any(o.get(k) != v for k, v in LIB_OPTS.items()):
+        st, r = call('POST', '/Library/VirtualFolders/LibraryOptions', {'Id': f['ItemId'], 'LibraryOptions': {**o, **LIB_OPTS}}, token=T)
+        log(f'library {f["Name"]}: trickplay with media, no NFO: {st} {r if st >= 300 else ""}')
+    else:
+        log(f'library {f["Name"]}: options already set')
 st, _ = call('POST', '/Library/Refresh', token=T)
 log(f'library scan started: {st}')
 

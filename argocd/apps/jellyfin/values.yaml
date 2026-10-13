@@ -1,5 +1,6 @@
 # Jellyfin: media server. https://jellyfin.lab.internal (and plain http:// for TV apps that can't trust the homelab CA).
-# Library is the shared NFS claim, mounted READ-ONLY (Jellyfin keeps metadata/artwork in /config, on Longhorn).
+# Library is the shared NFS claim: read-only except movies/ and tv/, where trickplay ("save with media") writes
+# <video>.trickplay/ folders. Metadata/artwork stay in /config, on Longhorn (NFO saving is off).
 # Quick Sync: requests one share of the node's Intel UHD 630 via the Intel GPU device plugin.
 controllers:
   jellyfin:
@@ -71,10 +72,15 @@ persistence:
     sizeLimit: 50Gi
     globalMounts:
       - path: /cache
-  # shared media share (helm/charts/media-storage), read-only
+  # shared media share (helm/charts/media-storage): read-only, but the two library roots are writable so trickplay
+  # images live next to the media on the NAS instead of filling the Longhorn /config volume
   data:
     type: persistentVolumeClaim
     existingClaim: media-data
     globalMounts:
       - path: /data
         readOnly: true
+      - path: /data/movies
+        subPath: movies
+      - path: /data/tv
+        subPath: tv

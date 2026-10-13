@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Configure Jellyfin (first-run, Quick Sync, libraries, API keys) and keep its credentials in Vault.
+# Configure Jellyfin (first-run, Quick Sync, libraries + trickplay options, API keys) and keep its credentials in Vault.
 #   VAULT_TOKEN=<root or admin token> ./scripts/jellyfin-setup.sh [--rotate=homepage|seerr|arr]
 # secret/jellyfin: admin-user, admin-password (generated once), homepage-key, seerr-key, arr-key.
 set -euo pipefail
