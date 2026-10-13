@@ -21,6 +21,13 @@ controllers:
         envFrom:
           - secretRef:
               name: homepage   # HOMEPAGE_VAR_{SONARR,RADARR,PROWLARR,JELLYFIN,SEERR,GLUETUN,BAZARR}_KEY, _{SYNOLOGY,UNIFI}_PASSWORD
+        # Since v2.2 the dashboard page is pre-rendered at image build and settings.yaml (title, background, layout) is
+        # only applied after a revalidate (the refresh button, or POST /api/revalidate). Do it on every start; after a
+        # settings.yaml-only change that doesn't roll the pod, press refresh (bottom right).
+        lifecycle:
+          postStart:
+            exec:
+              command: [sh, -c, 'for i in $(seq 1 60); do wget -q -O /dev/null --post-data="" http://127.0.0.1:3000/api/revalidate && exit 0; sleep 2; done; exit 0']
         probes:
           liveness: &probe
             enabled: true
@@ -121,6 +128,8 @@ configMaps:
             columns: 5
             icon: mdi-kubernetes
           Network:
+            style: row
+            columns: 2
             icon: mdi-lan
 
       kubernetes.yaml: |
