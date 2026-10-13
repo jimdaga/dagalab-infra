@@ -121,8 +121,6 @@ configMaps:
             columns: 5
             icon: mdi-kubernetes
           Network:
-            style: row
-            columns: 2
             icon: mdi-lan
 
       kubernetes.yaml: |
