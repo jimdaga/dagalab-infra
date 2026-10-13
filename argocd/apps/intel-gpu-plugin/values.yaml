@@ -11,5 +11,7 @@ nodeSelector:
 nodeFeatureRule: false
 # Don't mount /dev/dri/by-path symlinks into pods: on these nodes (kernel 7.0) the extra
 # "...platform-simple-framebuffer.0-card" entry makes containerd fail ("mkdir ... file exists").
-# Apps use /dev/dri/renderD128 directly.
+# Apps use /dev/dri/renderD128 directly. If a GPU pod fails with "failed to fulfil mount request: open
+# /dev/dri/by-path/...simple-framebuffer.0-card", that node has a stale CDI spec from before this setting
+# (/var/run/cdi/intel.cdi.k8s.io-gpu-card1.yaml listing by-path mounts): delete it and restart that node's plugin pod.
 bypathMode: none
