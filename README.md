@@ -207,5 +207,5 @@ Deploy order, so Jellyfin scans an already clean, ID-tagged library once:
 - [ ] Optional: replace Forgetting Sarah Marshall's 2-part CD1/CD2 rip (Radarr can't track multi-part files); Amazon What They Know About Us has no TMDB/TVDB entry and stays unmanaged
 - [ ] Jellyfin Enhanced: paste a TMDB API key and an MDBList key in Dashboard → Plugins → Jellyfin Enhanced (ratings, "Elsewhere", genre discovery), then enable MDBList ratings
 - [ ] Jellyfin: plugins (Playback Reporting, TMDb Box Sets, Session Cleaner, Chapter Segments Provider, Webhook, File Transformation, Plugin Pages, Home Screen Sections, Media Bar, Jellyfin Enhanced; repos IAmParadox27 + n00bcodr) and Jellyfin Enhanced settings live only in the Longhorn config volume: add them to `scripts/jellyfin-setup.py` so a rebuild restores them
-- [ ] Homepage/Homarr: read-only Synology and UniFi accounts (`secret/homepage-devices`) for the NAS and network widgets
+- [ ] Homarr: add UniFi + Synology integrations from `secret/homepage-devices` (Homepage has them; only if Homarr is kept)
 - [ ] Optional: stop `media` renaming the DSM-denied folders (remove "Delete subfolders and files" at the `video` root, re-grant per media folder)
