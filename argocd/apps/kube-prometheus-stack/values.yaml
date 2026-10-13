@@ -23,7 +23,36 @@ prometheus:
               storage: 50Gi
 
 alertmanager:
+  # Alerts -> Discord #alerts. Webhook URL from Vault secret/discord (ExternalSecret `discord`, mounted below), never in git.
+  config:
+    route:
+      receiver: discord-alerts
+      group_by: [alertname, namespace]
+      group_wait: 30s
+      group_interval: 5m
+      repeat_interval: 12h
+      routes:
+        # always-firing heartbeat / meta alerts: not for humans
+        - receiver: "null"
+          matchers: ['alertname =~ "Watchdog|InfoInhibitor"']
+    receivers:
+      - name: "null"
+      - name: discord-alerts
+        discord_configs:
+          - webhook_url_file: /etc/alertmanager/secrets/discord/webhook-alerts
+            send_resolved: true
+    inhibit_rules:
+      - source_matchers: ['severity = "critical"']
+        target_matchers: ['severity =~ "warning|info"']
+        equal: [namespace, alertname]
+      - source_matchers: ['severity = "warning"']
+        target_matchers: ['severity = "info"']
+        equal: [namespace, alertname]
+      - source_matchers: ['alertname = "InfoInhibitor"']
+        target_matchers: ['severity = "info"']
+        equal: [namespace]
   alertmanagerSpec:
+    secrets: [discord]   # -> /etc/alertmanager/secrets/discord/<key>
     storage:
       volumeClaimTemplate:
         spec:
