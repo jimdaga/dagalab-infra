@@ -83,11 +83,8 @@ externalSecrets:
       - secretKey: HOMEPAGE_VAR_GLUETUN_KEY   # Gluetun control server (VPN status widget)
         key: gluetun
         property: api-key
-      # passwords of the `homepage` device accounts (UniFi: local, Network View Only; DSM: administrators, which its
-      # stats API requires). The username is in the widget config.
-      - secretKey: HOMEPAGE_VAR_SYNOLOGY_PASSWORD
-        key: homepage-devices
-        property: synology-password
+      # password of the `homepage` UniFi account (local, Network View Only); the username is in the widget config.
+      # The DSM one is in `homepage-synology` below.
       - secretKey: HOMEPAGE_VAR_UNIFI_PASSWORD
         key: homepage-devices
         property: unifi-password
@@ -126,3 +123,13 @@ externalSecrets:
   - name: discord
     namespace: media
     extract: discord
+  # DSM password of the `homepage` account (administrators: the stats API requires it). Homepage pastes it into the
+  # login URL unencoded, so a '#' would cut it off: hand it over URL-encoded (DSM decodes it).
+  - name: homepage-synology
+    namespace: homepage
+    data:
+      - secretKey: password
+        key: homepage-devices
+        property: synology-password
+    template:
+      HOMEPAGE_VAR_SYNOLOGY_PASSWORD: '{{ .password | urlquery }}'
