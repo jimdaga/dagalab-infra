@@ -83,6 +83,19 @@ externalSecrets:
       - secretKey: HOMEPAGE_VAR_GLUETUN_KEY   # Gluetun control server (VPN status widget)
         key: gluetun
         property: api-key
+      # read-only device accounts `homepage` (DSM: users group, DSM app only; UniFi: local, Network View Only)
+      - secretKey: HOMEPAGE_VAR_SYNOLOGY_USER
+        key: homepage-devices
+        property: synology-user
+      - secretKey: HOMEPAGE_VAR_SYNOLOGY_PASSWORD
+        key: homepage-devices
+        property: synology-password
+      - secretKey: HOMEPAGE_VAR_UNIFI_USER
+        key: homepage-devices
+        property: unifi-user
+      - secretKey: HOMEPAGE_VAR_UNIFI_PASSWORD
+        key: homepage-devices
+        property: unifi-password
   # Gluetun's HTTP control server: every route requires the API key (otherwise legacy routes are open)
   - name: bazarr
     namespace: media
