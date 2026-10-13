@@ -20,7 +20,7 @@ controllers:
           HOMEPAGE_ALLOWED_HOSTS: homepage.lab.internal
         envFrom:
           - secretRef:
-              name: homepage   # HOMEPAGE_VAR_{SONARR,RADARR,PROWLARR,JELLYFIN,SEERR,GLUETUN,BAZARR}_KEY
+              name: homepage   # HOMEPAGE_VAR_{SONARR,RADARR,PROWLARR,JELLYFIN,SEERR,GLUETUN,BAZARR}_KEY, _{SYNOLOGY,UNIFI}_PASSWORD
         probes:
           liveness: &probe
             enabled: true
@@ -120,6 +120,10 @@ configMaps:
             style: row
             columns: 5
             icon: mdi-kubernetes
+          Network:
+            style: row
+            columns: 2
+            icon: mdi-lan
 
       kubernetes.yaml: |
         mode: cluster
@@ -289,15 +293,23 @@ configMaps:
                 namespace: vault
                 app: vault
                 siteMonitor: http://vault-active.vault.svc.cluster.local:8200/v1/sys/health
+        # read-only `homepage` accounts on the devices; passwords from Vault secret/homepage-devices
+        - Network:
+            - UniFi:
+                href: https://192.168.3.1
+                icon: ubiquiti-unifi.png
+                description: Cloud Gateway Ultra
+                widget:
+                  type: unifi
+                  url: https://192.168.3.1
+                  username: homepage
+                  password: "{{ "{{HOMEPAGE_VAR_UNIFI_PASSWORD}}" }}"
 
       bookmarks.yaml: |
         - Infrastructure:
             - dagalab-infra:
                 - icon: github.png
                   href: https://github.com/jimdaga/dagalab-infra
-            - UniFi:
-                - icon: ubiquiti-unifi.png
-                  href: https://192.168.3.1
             - daga-nas (DSM):
                 - icon: synology-dsm.png
                   href: https://192.168.3.20:5001
