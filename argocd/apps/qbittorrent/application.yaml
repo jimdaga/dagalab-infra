@@ -1,5 +1,4 @@
 ---
-# Parked until the NAS share exists (see the TODOs in values.yaml); rename to application.yaml to deploy.
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
