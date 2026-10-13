@@ -300,7 +300,8 @@ configMaps:
                 namespace: vault
                 app: vault
                 siteMonitor: http://vault-active.vault.svc.cluster.local:8200/v1/sys/health
-        # read-only `homepage` accounts on the devices; passwords from Vault secret/homepage-devices
+        # `homepage` accounts on the devices (UniFi: Network View Only; DSM: administrators, required for the stats API);
+        # passwords from Vault secret/homepage-devices
         - Network:
             - UniFi:
                 href: https://192.168.3.1
@@ -311,15 +312,22 @@ configMaps:
                   url: https://192.168.3.1
                   username: homepage
                   password: "{{ "{{HOMEPAGE_VAR_UNIFI_PASSWORD}}" }}"
+            - daga-nas:
+                href: https://192.168.3.20:5001
+                icon: synology-dsm.png
+                description: Synology DS420+ (DSM)
+                widget:
+                  type: diskstation
+                  url: https://192.168.3.20:5001
+                  username: homepage   # DSM only serves these stats to administrators
+                  password: "{{ "{{HOMEPAGE_VAR_SYNOLOGY_PASSWORD}}" }}"
+                  volume: volume_2     # the media share
 
       bookmarks.yaml: |
         - Infrastructure:
             - dagalab-infra:
                 - icon: github.png
                   href: https://github.com/jimdaga/dagalab-infra
-            - daga-nas (DSM):
-                - icon: synology-dsm.png
-                  href: https://192.168.3.20:5001
             - Homarr (trial):
                 - icon: homarr.png
                   href: https://homarr.lab.internal

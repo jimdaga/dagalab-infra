@@ -83,8 +83,8 @@ externalSecrets:
       - secretKey: HOMEPAGE_VAR_GLUETUN_KEY   # Gluetun control server (VPN status widget)
         key: gluetun
         property: api-key
-      # passwords of the read-only device accounts `homepage` (DSM: users group, DSM app only; UniFi: local,
-      # Network View Only). The username is in the widget config.
+      # passwords of the `homepage` device accounts (UniFi: local, Network View Only; DSM: administrators, which its
+      # stats API requires). The username is in the widget config.
       - secretKey: HOMEPAGE_VAR_SYNOLOGY_PASSWORD
         key: homepage-devices
         property: synology-password
