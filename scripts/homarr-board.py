@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
 """Lay out Homarr's boards and header tabs (run by scripts/homarr-setup.sh after onboarding; safe to re-run).
 
-Env: HOMARR_USER/HOMARR_PASSWORD (to read boards and set the header), HOMARR_API_KEY (REST), CA_FILE.
+Env: HOMARR_USER/HOMARR_PASSWORD (to read boards and set the header), HOMARR_API_KEY (REST), CA_FILE,
+UNIFI_PASSWORD / SYNOLOGY_PASSWORD (the `homepage` accounts on the UCG and DSM, from Vault secret/homepage-devices).
 Four boards, pinned as tabs in the header (centre zone) of HOMARR_USER, each with an icon (shown as the tab) and title:
   Home      clock, weather, media launchers, now playing, recently added, requests
   Library   calendar, missing/queued, request stats, subtitles
   Downloads qBittorrent, VPN, indexers
-  Platform  launchers for the platform UIs (incl. Homarr's Kubernetes pages) and Homepage's bookmarks
+  Platform  launchers for the platform UIs (incl. Homarr's Kubernetes pages) and Homepage's bookmarks; UniFi and NAS
+            widgets (device integrations created here, re-using Homepage's `homepage` accounts)
 Widgets keep the integrations onboarding created (taken from whichever board currently has that widget kind).
 The onboarding board "dagalab" is renamed to Home, so it stays the user's home board.
 """
@@ -22,7 +24,7 @@ cookies = {}
 
 def log(*a): print(*a, file=sys.stderr, flush=True)
 
-def request(method, path, body=None, form=None, api=False):
+def request(method, path, body=None, form=None, api=False, raw=None):
     c = http.client.HTTPSConnection(HOST, context=CTX, timeout=120)
     h = {'Origin': f'https://{HOST}', 'Sec-Fetch-Site': 'same-origin'}
     if api: h['ApiKey'] = os.environ['HOMARR_API_KEY']
@@ -30,6 +32,7 @@ def request(method, path, body=None, form=None, api=False):
     data = None
     if body is not None: data = json.dumps(body); h['Content-Type'] = 'application/json'
     elif form is not None: data = urllib.parse.urlencode(form); h['Content-Type'] = 'application/x-www-form-urlencoded'
+    elif raw is not None: data, h['Content-Type'] = raw
     c.request(method, path, body=data, headers=h); r = c.getresponse(); raw = r.read()
     for k, v in r.getheaders():
         if k.lower() == 'set-cookie':
@@ -52,6 +55,38 @@ st, csrf = request('GET', '/api/auth/csrf')
 request('POST', '/api/auth/callback/credentials', form={'csrfToken': csrf['csrfToken'], 'name': os.environ['HOMARR_USER'],
                                                        'password': os.environ['HOMARR_PASSWORD'], 'callbackUrl': f'https://{HOST}/'})
 me = request('GET', '/api/auth/session')[1]['user']
+
+def trpc(proc, data, what):
+    return ok(*request('POST', f'/api/trpc/{proc}', body={'json': data}), what)['result']['data']['json']
+
+# device integrations (onboarding only made the media ones). The UCG serves a self-signed cert for unifi.local:
+# trust it as its own root and pin it to the IP. DSM's cert is signed by a per-device "Synology Inc. CA" it doesn't
+# serve, so DSM is reached over plain HTTP on the lab VLAN instead.
+UCG, DSM = '192.168.3.1', '192.168.3.20'
+have = {i['name']: i for i in ok(*request('GET', '/api/trpc/integration.all'), 'listing integrations')['result']['data']['json']}
+if 'UniFi' not in have:
+    pem = ssl.get_server_certificate((UCG, 443))
+    fname = 'unifi-ucg.crt'
+    b = 'dagalab' + new_id()
+    body = (f'--{b}\r\nContent-Disposition: form-data; name="file"; filename="{fname}"\r\n'
+            f'Content-Type: application/x-x509-ca-cert\r\n\r\n{pem}\r\n--{b}--\r\n').encode()
+    ok(*request('POST', '/api/trpc/certificates.addCertificate', raw=(body, f'multipart/form-data; boundary={b}')), 'trusting UCG cert')
+    trpc('certificates.trustHostnameMismatch', {'hostname': UCG, 'certificate': pem}, 'pinning UCG cert to its IP')
+    log(f'certificate: UCG self-signed cert trusted for {UCG}')
+DEVICES = [  # name, kind, url, password env
+    ('UniFi', 'unifiController', f'https://{UCG}', 'UNIFI_PASSWORD'),
+    ('daga-nas', 'synology', f'http://{DSM}:5000', 'SYNOLOGY_PASSWORD'),
+]
+for name, kind, url, pw in DEVICES:
+    if name in have:
+        continue
+    r = trpc('integration.create', {'name': name, 'kind': kind, 'url': url, 'attemptSearchEngineCreation': False,
+                                    'secrets': [{'kind': 'username', 'value': 'homepage'}, {'kind': 'password', 'value': os.environ[pw]}]},
+             f'creating integration {name}')
+    if isinstance(r, dict) and r.get('error'):
+        raise SystemExit(f'integration {name}: connection test failed: {json.dumps(r["error"])[:400]}')
+    log(f'integration {name}: created ({url})')
+integrations = {i['name']: i for i in ok(*request('GET', '/api/trpc/integration.all'), 'listing integrations')['result']['data']['json']}
 
 # boards: rename the onboarding board to Home, create the others
 existing = {b['name']: b for b in ok(*request('GET', '/api/boards', api=True), 'listing boards')}
@@ -101,8 +136,8 @@ OPTIONS = {
     'weather': {'isFormatFahrenheit': True, 'location': LEOMINSTER, 'showCity': True, 'hasForecast': False},
 }
 
-def widget(kind):
-    t = templates[kind]
+def widget(kind, integration=None):
+    t = templates.get(kind) or {'integrationIds': [integrations[integration]['id']]}   # new widget kinds start blank
     return {'kind': kind, 'options': {**(t.get('options') or {}), **OPTIONS.get(kind, {})},
             'integrationIds': t.get('integrationIds') or [], 'advancedOptions': t.get('advancedOptions') or {}}
 
@@ -132,6 +167,8 @@ LAYOUT = {
     'Platform': [
         *launchers(('Kubernetes', 'Argo CD', 'Grafana', 'Longhorn', 'Vault'), 0, 0),
         *launchers(('Homepage', 'UniFi', 'daga-nas (DSM)', 'dagalab-infra', 'Proton Mail'), 0, 1),
+        (widget('healthMonitoring', 'daga-nas'), 0, 2, 4, 2), (widget('systemDisks', 'daga-nas'), 4, 2, 2, 2),
+        (widget('networkControllerSummary', 'UniFi'), 6, 2, 2, 2), (widget('networkControllerStatus', 'UniFi'), 8, 2, 2, 2),
     ],
 }
 

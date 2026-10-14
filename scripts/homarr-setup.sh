@@ -27,4 +27,6 @@ fi
 
 # board layout (rows by purpose, launchers, bookmarks, icons, weather); re-runnable on its own
 export HOMARR_API_KEY=$(v kv get -field=api-key secret/homarr)
+export UNIFI_PASSWORD=$(v kv get -field=unifi-password secret/homepage-devices) \
+  SYNOLOGY_PASSWORD=$(v kv get -field=synology-password secret/homepage-devices)   # the `homepage` device accounts
 python3 "$(dirname "$0")/homarr-board.py"
