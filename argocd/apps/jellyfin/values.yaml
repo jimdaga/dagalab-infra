@@ -1,4 +1,5 @@
-# Jellyfin: media server. https://jellyfin.lab.internal (and plain http:// for TV apps that can't trust the homelab CA).
+# Jellyfin: media server under BaseUrl /4orr (set by scripts/jellyfin-setup.py). LAN: https://jellyfin.lab.internal/4orr
+# (and plain http:// for TV apps that can't trust the homelab CA); public: https://dagaflix.com/4orr.
 # Library is the shared NFS claim, mounted READ-ONLY (Jellyfin keeps metadata/artwork in /config, on Longhorn;
 # trickplay tiles on their own NFS share, mounted at /config/data/trickplay).
 # Quick Sync: requests one share of the node's Intel UHD 630 via the Intel GPU device plugin.
@@ -21,14 +22,14 @@ controllers:
           tag: 12.2.20261005-225228
         env:
           TZ: America/New_York
-          JELLYFIN_PublishedServerUrl: https://jellyfin.lab.internal
+          JELLYFIN_PublishedServerUrl: https://jellyfin.lab.internal/4orr
         probes:
           liveness: &probe
             enabled: true
             custom: true
             spec:
               httpGet:
-                path: /health
+                path: /4orr/health   # BaseUrl; /health only redirects here
                 port: 8096
               periodSeconds: 30
               failureThreshold: 5
@@ -38,7 +39,7 @@ controllers:
             custom: true
             spec:
               httpGet:
-                path: /health
+                path: /4orr/health   # BaseUrl; /health only redirects here
                 port: 8096
               periodSeconds: 10
               failureThreshold: 30   # first start migrates/initialises the DB

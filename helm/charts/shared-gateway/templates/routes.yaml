@@ -13,7 +13,13 @@ spec:
   hostnames:
     - {{ ternary (printf "%s.%s" .host $.Values.domain) $.Values.domain (ne .host "") | quote }}
   rules:
-    - backendRefs:
+    - {{- with .pathPrefix }}
+      matches:
+        - path:
+            type: PathPrefix
+            value: {{ . }}
+      {{- end }}
+      backendRefs:
         - name: {{ .service }}
           port: {{ .port }}
 {{- end }}

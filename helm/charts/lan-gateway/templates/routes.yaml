@@ -19,7 +19,27 @@ spec:
   hostnames:
     - {{ printf "%s.%s" .host $.Values.domain | quote }}
   rules:
-    - backendRefs:
+    - {{- with .pathPrefix }}
+      matches:
+        - path:
+            type: PathPrefix
+            value: {{ . }}
+      {{- end }}
+      backendRefs:
         - name: {{ .service }}
           port: {{ .port }}
+    {{- with .pathPrefix }}
+    # anything outside the app's path (e.g. the bare host typed in a browser) -> its web UI
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      filters:
+        - type: RequestRedirect
+          requestRedirect:
+            path:
+              type: ReplaceFullPath
+              replaceFullPath: {{ printf "%s/web/" . }}
+            statusCode: 302
+    {{- end }}
 {{- end }}

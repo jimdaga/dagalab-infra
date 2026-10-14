@@ -13,7 +13,17 @@ gateway:
 certificate:
   issuer: letsencrypt-prod
 
-# HTTPRoutes: <host>.<domain> (or the bare domain when host is empty) -> service:port in namespace.
-# `name` defaults to host; route names must not collide with lan-gateway's <host>-lan.
+# HTTPRoutes: <host>.<domain> (or the bare domain when host is empty) -> service:port in namespace,
+# optionally only under pathPrefix. `name` defaults to host; must not collide with lan-gateway's <host>-lan.
+# Jellyfin lives under an unadvertised path (its BaseUrl); clients use https://dagaflix.com/4orr.
 routes:
-  - { name: jellyfin, host: "", namespace: media, service: jellyfin, port: 8096 }
+  - { name: jellyfin, host: "", pathPrefix: /4orr, namespace: media, service: jellyfin, port: 8096 }
+
+# Every other path on the bare domain gets this page straight from Envoy, so scanners see nothing
+# that identifies the server. The body is an Envoy format string: never use a percent sign in it.
+placeholder:
+  title: dagaflix.com
+  text: dagaflix.com
+
+# www.<domain> -> https://<domain>
+redirectWww: true

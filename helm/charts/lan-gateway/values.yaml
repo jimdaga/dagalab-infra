@@ -18,8 +18,9 @@ certificate:
 routes:
   - { host: homepage, namespace: homepage,        service: homepage,                      port: 3000 }
   - { host: homarr,   namespace: homarr,          service: homarr,                        port: 7575 }
-  # http: true also serves plain http://<host> (no redirect): TV apps can't install the homelab CA
-  - { host: jellyfin, namespace: media,           service: jellyfin,                      port: 8096, http: true }
+  # http: true also serves plain http://<host> (no redirect): TV apps can't install the homelab CA.
+  # pathPrefix: Jellyfin's BaseUrl (/4orr, shared with the public dagaflix.com route); other paths redirect to it.
+  - { host: jellyfin, namespace: media,           service: jellyfin,                      port: 8096, http: true, pathPrefix: /4orr }
   - { host: seerr,    namespace: media,           service: seerr,                         port: 5055 }
   - { host: torrent,  namespace: media,           service: qbittorrent,                   port: 8080 }
   - { host: sonarr,   namespace: media,           service: sonarr,                        port: 8989 }

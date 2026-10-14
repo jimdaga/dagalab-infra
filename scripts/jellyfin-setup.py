@@ -7,7 +7,8 @@ stdout when --emit-keys is given (the caller pipes them into Vault; nothing else
 """
 import json, os, sys, time, urllib.parse, urllib.request, urllib.error
 
-B = 'http://127.0.0.1:18096'
+ROOT = 'http://127.0.0.1:18096'
+BASE_URL = '/4orr'   # unadvertised path: dagaflix.com/4orr, jellyfin.lab.internal/4orr (gateways route only this)
 USER, PW = os.environ['JF_USER'], os.environ['JF_PASSWORD']
 EMIT = '--emit-keys' in sys.argv
 ROTATE = [a.split('=', 1)[1] for a in sys.argv if a.startswith('--rotate=')]   # e.g. --rotate=homepage
@@ -27,6 +28,14 @@ def call(method, path, body=None, token=None, raw=False):
             return r.status, (data if raw else (json.loads(data) if data and data[:1] in b'[{' else data.decode()))
     except urllib.error.HTTPError as e:
         return e.code, e.read().decode()[:300]
+
+# 0) a fresh install serves from /, a configured one only under BASE_URL (/ just redirects)
+try:
+    urllib.request.urlopen(ROOT + BASE_URL + '/System/Info/Public', timeout=10)
+    B = ROOT + BASE_URL
+except urllib.error.URLError:
+    B = ROOT
+log(f'api base: {B}')
 
 # 1) startup wizard (only while not completed)
 st, info = call('GET', '/System/Info/Public')
@@ -53,10 +62,19 @@ log(f'login as {USER}: ok')
 
 # 3) server name
 st, cfg = call('GET', '/System/Configuration', token=T)
-if cfg.get('ServerName') != 'dagalab':
-    cfg['ServerName'] = 'dagalab'
+if cfg.get('ServerName') != 'DAGAFLIX':
+    cfg['ServerName'] = 'DAGAFLIX'
     st, _ = call('POST', '/System/Configuration', cfg, token=T)
-    log(f'server name -> dagalab: {st}')
+    log(f'server name -> DAGAFLIX: {st}')
+
+# 3b) base URL: takes effect after a restart; the gateways and every client URL include it
+st, net = call('GET', '/System/Configuration/network', token=T)
+if net.get('BaseUrl') != BASE_URL:
+    net['BaseUrl'] = BASE_URL
+    st, _ = call('POST', '/System/Configuration/network', net, token=T)
+    log(f'base URL -> {BASE_URL}: {st}; restart Jellyfin to apply (kubectl -n media rollout restart deploy/jellyfin), then rerun')
+else:
+    log(f'base URL: {BASE_URL}')
 
 # 4) hardware transcoding: Intel Quick Sync on the UHD 630 (Gen 9.5)
 st, enc = call('GET', '/System/Configuration/encoding', token=T)

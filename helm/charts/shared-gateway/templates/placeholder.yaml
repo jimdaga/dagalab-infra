@@ -1,0 +1,66 @@
+{{- with .Values.placeholder }}
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: HTTPRouteFilter
+metadata:
+  name: placeholder
+  namespace: {{ $.Release.Namespace }}
+spec:
+  directResponse:
+    contentType: text/html; charset=utf-8
+    statusCode: 200
+    body:
+      type: Inline
+      inline: >-
+        <!doctype html><html lang="en"><head><meta charset="utf-8">
+        <meta name="viewport" content="width=device-width,initial-scale=1">
+        <meta name="robots" content="noindex"><title>{{ .title }}</title>
+        <style>html,body{margin:0;height:100vh;background:#fff}
+        body{display:flex;align-items:flex-end;justify-content:center}
+        p{margin:0 0 2rem;color:#000;font:14px/1.4 system-ui,sans-serif}</style>
+        </head><body><p>{{ .text }}</p></body></html>
+---
+# Lowest-precedence route on the bare domain: longer path prefixes (the app routes) win
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: placeholder
+  namespace: {{ $.Release.Namespace }}
+spec:
+  parentRefs:
+    - name: {{ $.Values.gateway.name }}
+      sectionName: https
+  hostnames:
+    - {{ $.Values.domain | quote }}
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      filters:
+        - type: ExtensionRef
+          extensionRef:
+            group: gateway.envoyproxy.io
+            kind: HTTPRouteFilter
+            name: placeholder
+{{- end }}
+{{- if .Values.redirectWww }}
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: www-redirect
+  namespace: {{ .Release.Namespace }}
+spec:
+  parentRefs:
+    - name: {{ .Values.gateway.name }}
+      sectionName: https
+  hostnames:
+    - {{ printf "www.%s" .Values.domain | quote }}
+  rules:
+    - filters:
+        - type: RequestRedirect
+          requestRedirect:
+            scheme: https
+            hostname: {{ .Values.domain | quote }}
+            statusCode: 301
+{{- end }}

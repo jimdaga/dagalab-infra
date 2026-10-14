@@ -140,17 +140,17 @@ configMaps:
       services.yaml: |
         - Watch:
             - Jellyfin:
-                href: https://jellyfin.lab.internal
+                href: https://jellyfin.lab.internal/4orr/web/
                 icon: jellyfin.png
                 description: Watch
                 namespace: media
                 app: jellyfin
-                siteMonitor: http://jellyfin.media.svc.cluster.local:8096/health
+                siteMonitor: http://jellyfin.media.svc.cluster.local:8096/4orr/health
                 # version 2 = Jellyfin 10.11+/12 API (Authorization: MediaBrowser Token header, no /emby or api_key)
                 widget:
                   type: jellyfin
                   version: 2
-                  url: http://jellyfin.media.svc.cluster.local:8096
+                  url: http://jellyfin.media.svc.cluster.local:8096/4orr
                   key: "{{ "{{HOMEPAGE_VAR_JELLYFIN_KEY}}" }}"
                   enableBlocks: true        # library counts (movies / series / episodes)
                   enableNowPlaying: true    # active streams, with pause/resume
