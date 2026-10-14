@@ -2,13 +2,14 @@
 """Lay out Homarr's boards and header tabs (run by scripts/homarr-setup.sh after onboarding; safe to re-run).
 
 Env: HOMARR_USER/HOMARR_PASSWORD (to read boards and set the header), HOMARR_API_KEY (REST), CA_FILE,
-UNIFI_PASSWORD / SYNOLOGY_PASSWORD (the `homepage` accounts on the UCG and DSM, from Vault secret/homepage-devices).
+UNIFI_PASSWORD / SYNOLOGY_PASSWORD (the `homepage` accounts on the UCG and DSM, from Vault secret/homepage-devices),
+HA_TOKEN (Home Assistant long-lived token, Vault secret/home-assistant api-token).
 Four boards, pinned as tabs in the header (centre zone) of HOMARR_USER, each with an icon (shown as the tab) and title:
   Home      clock, weather, media launchers, now playing, recently added, requests
   Library   calendar, missing/queued, request stats, subtitles
   Downloads qBittorrent, VPN, indexers
   Platform  launchers for the platform UIs (incl. Homarr's Kubernetes pages) and Homepage's bookmarks; UniFi and NAS
-            widgets (device integrations created here, re-using Homepage's `homepage` accounts)
+            widgets (UniFi, NAS and Home Assistant integrations created here, the devices re-using Homepage's `homepage` accounts)
 Widgets keep the integrations onboarding created (taken from whichever board currently has that widget kind).
 The onboarding board "dagalab" is renamed to Home, so it stays the user's home board.
 """
@@ -73,15 +74,18 @@ if 'UniFi' not in have:
     ok(*request('POST', '/api/trpc/certificates.addCertificate', raw=(body, f'multipart/form-data; boundary={b}')), 'trusting UCG cert')
     trpc('certificates.trustHostnameMismatch', {'hostname': UCG, 'certificate': pem}, 'pinning UCG cert to its IP')
     log(f'certificate: UCG self-signed cert trusted for {UCG}')
-DEVICES = [  # name, kind, url, password env
-    ('UniFi', 'unifiController', f'https://{UCG}', 'UNIFI_PASSWORD'),
-    ('daga-nas', 'synology', f'http://{DSM}:5000', 'SYNOLOGY_PASSWORD'),
+DEVICES = [  # name, kind, url, secrets (kind, value)
+    ('UniFi', 'unifiController', f'https://{UCG}', [('username', 'homepage'), ('password', os.environ['UNIFI_PASSWORD'])]),
+    ('daga-nas', 'synology', f'http://{DSM}:5000', [('username', 'homepage'), ('password', os.environ['SYNOLOGY_PASSWORD'])]),
+    # long-lived token "dagalab" (scripts/home-assistant-setup.sh); in-cluster, so no lab CA / DNS needed
+    ('Home Assistant', 'homeAssistant', 'http://home-assistant.home-assistant.svc.cluster.local:8123',
+     [('apiKey', os.environ['HA_TOKEN'])]),
 ]
-for name, kind, url, pw in DEVICES:
+for name, kind, url, secrets in DEVICES:
     if name in have:
         continue
     r = trpc('integration.create', {'name': name, 'kind': kind, 'url': url, 'attemptSearchEngineCreation': False,
-                                    'secrets': [{'kind': 'username', 'value': 'homepage'}, {'kind': 'password', 'value': os.environ[pw]}]},
+                                    'secrets': [{'kind': k, 'value': v} for k, v in secrets]},
              f'creating integration {name}')
     if isinstance(r, dict) and r.get('error'):
         raise SystemExit(f'integration {name}: connection test failed: {json.dumps(r["error"])[:400]}')
@@ -108,6 +112,7 @@ WANT_APPS = {  # name: (href, iconUrl, description); existing apps only get thei
     'Grafana': (None, f'{ICONS}/svg/grafana.svg', None),
     'Longhorn': (None, f'{ICONS}/svg/longhorn.svg', None),
     'Vault': (None, f'{ICONS}/svg/hashicorp-vault.svg', None),
+    'Home Assistant': ('https://home.lab.internal', f'{ICONS}/svg/home-assistant.svg', 'Home automation'),
     'Homepage': (None, f'{ICONS}/png/homepage.png', None),
     'dagalab-infra': ('https://github.com/jimdaga/dagalab-infra', f'{ICONS}/svg/github.svg', 'GitOps repo'),
     'UniFi': ('https://192.168.3.1', f'{ICONS}/svg/ubiquiti-unifi.svg', 'Cloud Gateway'),
@@ -166,7 +171,7 @@ LAYOUT = {
         *launchers(('qBittorrent', 'Prowlarr'), 7, 3),
     ],
     'Platform': [
-        *launchers(('Kubernetes', 'Argo CD', 'Grafana', 'Longhorn', 'Vault'), 0, 0),
+        *launchers(('Kubernetes', 'Argo CD', 'Grafana', 'Longhorn', 'Vault', 'Home Assistant'), 0, 0),
         *launchers(('Homepage', 'UniFi', 'daga-nas (DSM)', 'dagalab-infra', 'Proton Mail'), 0, 1),
         (widget('healthMonitoring', 'daga-nas'), 0, 2, 4, 2), (widget('systemDisks', 'daga-nas'), 4, 2, 2, 2),
         (widget('networkControllerSummary', 'UniFi'), 6, 2, 2, 2), (widget('networkControllerStatus', 'UniFi', content='wifi'), 8, 2, 2, 2),

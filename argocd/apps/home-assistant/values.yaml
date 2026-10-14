@@ -96,6 +96,20 @@ configMaps:
         script: !include scripts.yaml
         scene: !include scenes.yaml
 
+serviceMonitor:
+  app:
+    service:
+      identifier: app
+    endpoints:
+      - port: http
+        path: /api/prometheus
+        interval: 1m
+        authorization:
+          type: Bearer
+          credentials:   # helm/charts/secret-stores, from Vault secret/home-assistant api-token
+            name: home-assistant-prometheus
+            key: token
+
 persistence:
   # recorder SQLite DB, .storage, UI-made YAML: Longhorn, never NFS
   config:

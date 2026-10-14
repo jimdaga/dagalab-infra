@@ -29,4 +29,5 @@ fi
 export HOMARR_API_KEY=$(v kv get -field=api-key secret/homarr)
 export UNIFI_PASSWORD=$(v kv get -field=unifi-password secret/homepage-devices) \
   SYNOLOGY_PASSWORD=$(v kv get -field=synology-password secret/homepage-devices)   # the `homepage` device accounts
+export HA_TOKEN=$(v kv get -field=api-token secret/home-assistant)   # scripts/home-assistant-setup.sh
 python3 "$(dirname "$0")/homarr-board.py"

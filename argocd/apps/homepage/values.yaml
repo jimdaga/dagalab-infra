@@ -20,7 +20,7 @@ controllers:
           HOMEPAGE_ALLOWED_HOSTS: homepage.lab.internal
         envFrom:
           - secretRef:
-              name: homepage   # HOMEPAGE_VAR_{SONARR,RADARR,PROWLARR,JELLYFIN,SEERR,GLUETUN,BAZARR}_KEY, _UNIFI_PASSWORD
+              name: homepage   # HOMEPAGE_VAR_{SONARR,RADARR,PROWLARR,JELLYFIN,SEERR,GLUETUN,BAZARR}_KEY, _UNIFI_PASSWORD, _HA_TOKEN
           - secretRef:
               name: homepage-synology   # HOMEPAGE_VAR_SYNOLOGY_PASSWORD (URL-encoded)
         # Since v2.2 the dashboard page is pre-rendered at image build and settings.yaml (title, background, layout) is
@@ -302,6 +302,16 @@ configMaps:
                 namespace: vault
                 app: vault
                 siteMonitor: http://vault-active.vault.svc.cluster.local:8200/v1/sys/health
+            - Home Assistant:
+                href: https://home.lab.internal
+                icon: home-assistant.png
+                description: Home automation
+                namespace: home-assistant
+                app: home-assistant
+                widget:
+                  type: homeassistant
+                  url: http://home-assistant.home-assistant.svc.cluster.local:8123
+                  key: "{{ "{{HOMEPAGE_VAR_HA_TOKEN}}" }}"   # long-lived token "dagalab"
         # `homepage` accounts on the devices (UniFi: Network View Only; DSM: administrators, required for the stats API);
         # passwords from Vault secret/homepage-devices
         - Network:
