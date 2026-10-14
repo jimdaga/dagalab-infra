@@ -79,15 +79,8 @@ configMaps:
           country: US
           internal_url: https://home.lab.internal
 
-        # The LAN gateway (Envoy) proxies from the pod network; flannel may SNAT pod -> hostNetwork traffic to the
-        # node IP, so trust both. Without this HA answers proxied requests with 400.
-        http:
-          use_x_forwarded_for: true
-          trusted_proxies:
-            - 10.42.0.0/16
-            - 192.168.3.11
-            - 192.168.3.12
-            - 192.168.3.13
+        # No `http:` here: since 2026.10 HA keeps it in .storage (YAML is imported once, then ignored) and new config
+        # must be confirmed. Proxy trust for the LAN gateway is applied + confirmed by scripts/home-assistant-setup.sh.
 
         # /api/prometheus, scraped with the long-lived token (ServiceMonitor below, token via ExternalSecret)
         prometheus:

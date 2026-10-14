@@ -113,7 +113,7 @@ ingress-nginx was retired in March 2026, and Gateway API is where things are hea
 | `seerr.lab.internal` | Seerr (requests) |
 | `homepage.lab.internal` | Homepage: dashboard linking everything below, with cluster/node CPU+memory and pod status (read-only ClusterRole), Longhorn usage, Sonarr/Radarr release calendar, VPN status (Gluetun control server, API key from Vault `secret/gluetun`). Config in `argocd/apps/homepage/values.yaml` |
 | `homarr.lab.internal` | Homarr (trial): same services as Homepage as a drag-and-drop board with live integrations (Jellyfin now playing, Seerr requests, calendar, downloads, VPN, Prowlarr, Bazarr, missing media; NAS health/volumes/resource charts and UniFi summary + Wi-Fi/wired clients and a Home Assistant integration on Platform, via Homepage's `homepage` device accounts: UCG over HTTPS with its self-signed cert trusted + pinned to the IP, DSM over HTTP :5000 on the lab VLAN since its cert's CA isn't served). Config is in its SQLite DB on Longhorn, **not** in git; seeded by `scripts/homarr-setup.sh` (admin `jim`, password + API key in Vault `secret/homarr`); `scripts/homarr-board.py` lays out four boards shown as header tabs (Home, Library, Downloads, Platform; re-runnable, resets UI edits) |
-| `home.lab.internal` | Home Assistant: `hostNetwork` pod (discovery from the node's VLAN 3 interface; port 8123 open on that node). `configuration.yaml` (location, units, proxy trust, Prometheus) is in `argocd/apps/home-assistant/values.yaml`; everything made in the UI lives on its Longhorn volume, **not** in git. First run + lab integrations: `scripts/home-assistant-setup.sh` (admin `jim`, password + API token in Vault `secret/home-assistant`) |
+| `home.lab.internal` | Home Assistant: `hostNetwork` pod (discovery from the node's VLAN 3 interface; port 8123 open on that node). `configuration.yaml` (location, units, Prometheus) is in `argocd/apps/home-assistant/values.yaml`; everything made in the UI lives on its Longhorn volume, **not** in git. First run, proxy trust for the gateway (HA 2026.10+ keeps `http:` settings in `.storage` and only applies a change once it's confirmed, so YAML can't set them) and lab integrations: `scripts/home-assistant-setup.sh` (admin `jim`, password + API token in Vault `secret/home-assistant`) |
 | `torrent.lab.internal` | qBittorrent |
 | `sonarr.lab.internal` / `radarr.lab.internal` / `prowlarr.lab.internal` | *arr apps |
 | `argocd.lab.internal` | Argo CD |
@@ -206,7 +206,7 @@ Deploy order, so Jellyfin scans an already clean, ID-tagged library once:
 - [ ] UniFi DNS: `bazarr.lab.internal` → 192.168.3.201
 - [ ] Dashboard trial: keep Homepage or Homarr, then remove the other (Argo app, lan-gateway route, UniFi record, Vault `secret/homarr` if Homarr goes; Homarr reuses Homepage's Jellyfin key)
 - [ ] UniFi DNS: `homarr.lab.internal` → 192.168.3.201
-- [ ] UniFi DNS: `home.lab.internal` → 192.168.3.201
+- [x] UniFi DNS: `home.lab.internal` → 192.168.3.201
 - [ ] Home Assistant: review Settings → Devices & services → Discovered (main-LAN devices) and add the ones wanted
 - [ ] Exportarr: when v3 is released, bump the sidecars and restore per-state queue panels/alerts (import stuck, stalled) in `helm/charts/media-monitoring`; v2.3.0 mislabels `*_queue_total` (one series, last item's state, value = total)
 - [ ] Optional: replace Forgetting Sarah Marshall's 2-part CD1/CD2 rip (Radarr can't track multi-part files); Amazon What They Know About Us has no TMDB/TVDB entry and stays unmanaged

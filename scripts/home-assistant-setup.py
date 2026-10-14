@@ -3,22 +3,26 @@
 
 Env: HA_USER/HA_PASSWORD (admin to create/log in as), HA_TOKEN (long-lived token from Vault; may be empty or stale),
 JF_ADMIN_KEY (Jellyfin API key "arr"), JF_HA_PASSWORD (password of the Jellyfin user `homeassistant`),
-UNIFI_PASSWORD/SYNOLOGY_PASSWORD (the `homepage` device accounts), SONARR_KEY, RADARR_KEY.
+UNIFI_PASSWORD/SYNOLOGY_PASSWORD (the `homepage` device accounts), SONARR_KEY, RADARR_KEY, CA_FILE (lab CA, to check
+https://home.lab.internal through the LAN gateway).
 Prints HA_TOKEN=<token> on stdout only when it creates a new long-lived token (the caller stores it in Vault, even
 when this exits non-zero); everything else goes to stderr and never includes secrets. Exits 1 if an integration failed.
 """
-import base64, json, os, socket, struct, sys, urllib.error, urllib.parse, urllib.request
+import base64, ipaddress, json, os, socket, ssl, struct, sys, time, urllib.error, urllib.parse, urllib.request
 
 HA, JF = 'http://127.0.0.1:18123', 'http://127.0.0.1:18096'
 CLIENT = HA + '/'           # OAuth client id for our own logins (any URL on the same host)
 TOKEN_NAME = 'dagalab'      # the long-lived token's name in HA (Profile -> Security)
 JF_USER = 'homeassistant'   # Jellyfin user the HA Jellyfin integration signs in as
 SVC = 'media.svc.cluster.local'
+LAN_URL = 'https://home.lab.internal'
+# the LAN gateway (Envoy) connects from the pod network; flannel may SNAT pod -> hostNetwork traffic to the node IP
+TRUSTED_PROXIES = ['10.42.0.0/16', '192.168.3.11/32', '192.168.3.12/32', '192.168.3.13/32']
 USER, PW, JF_PW = os.environ['HA_USER'], os.environ['HA_PASSWORD'], os.environ['JF_HA_PASSWORD']
 
 def log(*a): print(*a, file=sys.stderr, flush=True)
 
-def call(method, url, body=None, token=None, form=None, headers=None):
+def call(method, url, body=None, token=None, form=None, headers=None, ctx=None):
     h, data = dict(headers or {}), None
     if form is not None:
         data, h['Content-Type'] = urllib.parse.urlencode(form).encode(), 'application/x-www-form-urlencoded'
@@ -27,10 +31,12 @@ def call(method, url, body=None, token=None, form=None, headers=None):
     if token:
         h['Authorization'] = f'Bearer {token}'
     try:
-        with urllib.request.urlopen(urllib.request.Request(url, method=method, headers=h, data=data), timeout=120) as r:
+        with urllib.request.urlopen(urllib.request.Request(url, method=method, headers=h, data=data), timeout=120, context=ctx) as r:
             raw = r.read(); return r.status, (json.loads(raw) if raw[:1] in (b'{', b'[') else raw.decode())
     except urllib.error.HTTPError as e:
         return e.code, e.read().decode()[:300]
+    except (urllib.error.URLError, ConnectionError, TimeoutError) as e:   # HA restarting, port-forward reconnecting
+        return 0, str(e)
 
 class WS:
     """Minimal websocket client for HA's /api/websocket (stdlib only; small text frames, client frames masked)."""
@@ -89,7 +95,10 @@ def exchange(code):
 
 # 1) onboarding (each step only while not done), else a normal login
 st, steps = call('GET', HA + '/api/onboarding')
-if st != 200: sys.exit(f'onboarding status failed: {st} {steps}')
+if st == 404:   # onboarding finished: HA stops serving the endpoint after the next restart
+    steps = [{'step': s, 'done': True} for s in ('user', 'core_config', 'analytics', 'integration')]
+elif st != 200:
+    sys.exit(f'onboarding status failed: {st} {steps}')
 done = {s['step']: s['done'] for s in steps}
 if not done.get('user'):
     st, r = call('POST', HA + '/api/onboarding/users',
@@ -124,18 +133,56 @@ else:
     print(f'HA_TOKEN={new}', flush=True)
     log(f'api token: created "{TOKEN_NAME}" (10 years)')
 
+# 2b) proxy trust for the LAN gateway. Since 2026.10 HA keeps http settings in .storage (YAML `http:` is imported
+# once, then ignored): a change is staged as "pending", HA restarts into it, and it must be promoted within 5 minutes
+# or HA reverts to the stable one. Promote only after a request through the gateway works.
+def wait_running():
+    for _ in range(120):
+        st, c = call('GET', HA + '/api/config', token=T)
+        if st == 200 and isinstance(c, dict) and c.get('state') == 'RUNNING':
+            return
+        time.sleep(2)
+    sys.exit('Home Assistant did not come back after the restart')
+
+def norm(nets): return sorted(str(ipaddress.ip_network(n, strict=False)) for n in nets or [])
+
+http = WS(T).cmd({'type': 'http/config'})
+stable = http['stable'] or http['default']
+if stable.get('use_x_forwarded_for') and norm(stable.get('trusted_proxies')) == norm(TRUSTED_PROXIES):
+    log('http: proxy trust already set')
+else:
+    keep = {k: v for k, v in stable.items() if k not in ('created_at', 'error', 'error_message')}
+    r = WS(T).cmd({'type': 'http/config/configure',
+                   'config': dict(keep, use_x_forwarded_for=True, trusted_proxies=TRUSTED_PROXIES)})
+    log(f'http: proxy trust staged (restart: {r.get("restart")}), waiting for Home Assistant')
+    time.sleep(10)
+    wait_running()
+    gw = ssl.create_default_context(cafile=os.environ['CA_FILE'])
+    st, r = call('GET', LAN_URL + '/api/', token=T, ctx=gw)
+    if st != 200:
+        sys.exit(f'http: {LAN_URL} answers {st} with the staged config; not promoting (HA reverts it in 5 minutes)')
+    WS(T).cmd({'type': 'http/config/promote'})
+    log(f'http: proxy trust promoted ({LAN_URL} works through the gateway)')
+
 # 3) Jellyfin user for the HA integration: non-admin, hidden from the login screen, LAN only. Password from Vault
 JH = {'Authorization': f'MediaBrowser Token="{os.environ["JF_ADMIN_KEY"]}"'}
 st, users = call('GET', JF + '/Users', headers=JH)
 if st != 200: sys.exit(f'jellyfin user list failed: {st} {users}')
 u = next((x for x in users if x['Name'] == JF_USER), None)
+jf_reset = False
 if u is None:
     st, u = call('POST', JF + '/Users/New', {'Name': JF_USER, 'Password': JF_PW}, headers=JH)
     if st != 200: sys.exit(f'jellyfin user create failed: {st} {u}')
     log(f'jellyfin user {JF_USER}: created')
 else:
-    st, r = call('POST', JF + f'/Users/{u["Id"]}/Password', {'NewPw': JF_PW}, headers=JH)
-    log(f'jellyfin user {JF_USER}: password synced from Vault ({st})')
+    login = {'Authorization': 'MediaBrowser Client="dagalab-setup", Device="cli", DeviceId="dagalab-setup-ha", Version="1.0"'}
+    st, _ = call('POST', JF + '/Users/AuthenticateByName', {'Username': JF_USER, 'Pw': JF_PW}, headers=login)
+    if st == 200:
+        log(f'jellyfin user {JF_USER}: password matches Vault')
+    else:   # a reset signs the user out everywhere, so only when it doesn't match; then HA's integration re-logs in
+        st, r = call('POST', JF + f'/Users/{u["Id"]}/Password', {'NewPw': JF_PW}, headers=JH)
+        log(f'jellyfin user {JF_USER}: password reset to the Vault one ({st})')
+        jf_reset = True
 pol = dict(u['Policy'], IsAdministrator=False, IsHidden=True, EnableRemoteAccess=False,
            EnableContentDeletion=False, EnableContentDownloading=False)
 if pol != u['Policy']:
@@ -175,6 +222,10 @@ def missing(schema, values):
 st, entries = call('GET', HA + '/api/config/config_entries/entry', token=T)
 if st != 200: sys.exit(f'config entries failed: {st} {entries}')
 have, failed = {e['domain'] for e in entries}, []
+for e in entries:   # HA's Jellyfin session dies with a password reset (and with the earlier always-reset runs)
+    if e['domain'] == 'jellyfin' and (jf_reset or e.get('state') != 'loaded'):
+        st, _ = call('POST', HA + f'/api/config/config_entries/entry/{e["entry_id"]}/reload', token=T)
+        log(f'integration jellyfin: reloaded ({st})')
 for domain, values in FLOWS.items():
     if domain in have:
         log(f'integration {domain}: present'); continue

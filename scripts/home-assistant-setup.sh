@@ -21,12 +21,13 @@ export JF_ADMIN_KEY=$(key media jellyfin-arr JELLYFIN_KEY) SONARR_KEY=${SONARR_K
   RADARR_KEY=$(key media radarr RADARR__AUTH__APIKEY)
 export UNIFI_PASSWORD=$(v kv get -field=unifi-password secret/homepage-devices) \
   SYNOLOGY_PASSWORD=$(v kv get -field=synology-password secret/homepage-devices)   # the `homepage` device accounts
+export CA_FILE=${CA_FILE:-$HOME/kube-configs/dagalab-lab-ca.crt}   # lab CA: the gateway check before promoting http config
 
 kubectl -n home-assistant port-forward svc/home-assistant 18123:8123 >/dev/null 2>&1 & pf1=$!
 kubectl -n media port-forward svc/jellyfin 18096:8096 >/dev/null 2>&1 & pf2=$!
 trap 'kill $pf1 $pf2 2>/dev/null' EXIT
 for _ in $(seq 1 30); do
-  curl -s -o /dev/null http://127.0.0.1:18123/api/onboarding && curl -s -o /dev/null http://127.0.0.1:18096/health && break
+  curl -s -o /dev/null http://127.0.0.1:18123/manifest.json && curl -s -o /dev/null http://127.0.0.1:18096/health && break
   sleep 0.5
 done
 
