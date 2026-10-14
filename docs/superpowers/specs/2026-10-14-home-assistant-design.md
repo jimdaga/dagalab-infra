@@ -53,9 +53,9 @@ and the hostname is `home.lab.internal`.
 Same style as `seerr-setup` / `homarr-setup`: a port-forward, safe to re-run, secrets read from
 Vault in-process and never printed.
 
-1. Onboarding over the API (only while not done): admin user `jim` with a generated password, core
-   config (home location = the Homepage weather widget's 42.5274, -71.7563; US customary units, °F;
-   time zone `America/New_York`; currency USD), analytics off.
+1. Onboarding over the API (only while not done): admin user `jim` with a generated password, analytics off.
+   Core config (home location = the Homepage weather widget's 42.5274, -71.7563; US customary units, °F;
+   time zone `America/New_York`; currency USD) is set in `configuration.yaml` instead (git).
 2. Vault `secret/home-assistant`: `admin-password`, plus `api-token`, a long-lived access token
    (created once; the script reuses an existing one).
 3. Integrations through the config-flow API, each skipped when a config entry for it exists:

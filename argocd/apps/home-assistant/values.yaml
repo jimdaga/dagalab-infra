@@ -1,0 +1,113 @@
+# Home Assistant: home automation. LAN only: https://home.lab.internal (helm/charts/lan-gateway).
+# hostNetwork: mDNS/SSDP discovery runs from the node's VLAN 3 interface and reaches the main LAN by routing
+# (not isolated from VLAN 3). Port 8123 is open on whichever node runs the pod.
+# configuration.yaml is below (git); everything made in the UI (integrations, devices, dashboards, automations)
+# lives in /config on Longhorn. First-run setup and lab integrations: scripts/home-assistant-setup.sh.
+controllers:
+  home-assistant:
+    strategy: Recreate   # never two HA instances on one config
+    pod:
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet   # still resolve *.svc.cluster.local (Jellyfin, Sonarr, Radarr)
+    initContainers:
+      # the UI editors write these; configuration.yaml includes them. Create only when missing, never truncate.
+      seed:
+        image:
+          repository: ghcr.io/home-assistant/home-assistant
+          tag: 2026.10.1
+        command:
+          - sh
+          - -c
+          - |
+            for f in automations:[] scripts:{} scenes:[]; do
+              p=/config/${f%%:*}.yaml
+              [ -e "$p" ] || echo "${f#*:}" > "$p"
+            done
+    containers:
+      app:
+        image:
+          repository: ghcr.io/home-assistant/home-assistant
+          tag: 2026.10.1
+        env:
+          TZ: America/New_York
+        probes:
+          liveness: &probe
+            enabled: true
+            custom: true
+            spec:
+              tcpSocket:
+                port: 8123
+              periodSeconds: 30
+              failureThreshold: 5
+          readiness: *probe
+          startup:
+            enabled: true
+            custom: true
+            spec:
+              tcpSocket:
+                port: 8123
+              periodSeconds: 10
+              failureThreshold: 30   # first start installs integration requirements
+        resources:
+          requests:
+            cpu: 100m
+            memory: 512Mi
+          limits:
+            memory: 2Gi
+
+service:
+  app:
+    controller: home-assistant
+    ports:
+      http:
+        port: 8123
+
+configMaps:
+  config:
+    data:
+      configuration.yaml: |
+        default_config:
+
+        # core config lives here, not in the UI (the UI shows it read-only)
+        homeassistant:
+          name: Home
+          latitude: 42.5274
+          longitude: -71.7563
+          unit_system: us_customary
+          time_zone: America/New_York
+          currency: USD
+          country: US
+          internal_url: https://home.lab.internal
+
+        # The LAN gateway (Envoy) proxies from the pod network; flannel may SNAT pod -> hostNetwork traffic to the
+        # node IP, so trust both. Without this HA answers proxied requests with 400.
+        http:
+          use_x_forwarded_for: true
+          trusted_proxies:
+            - 10.42.0.0/16
+            - 192.168.3.11
+            - 192.168.3.12
+            - 192.168.3.13
+
+        # /api/prometheus, scraped with the long-lived token (ServiceMonitor below, token via ExternalSecret)
+        prometheus:
+
+        automation: !include automations.yaml
+        script: !include scripts.yaml
+        scene: !include scenes.yaml
+
+persistence:
+  # recorder SQLite DB, .storage, UI-made YAML: Longhorn, never NFS
+  config:
+    type: persistentVolumeClaim
+    accessMode: ReadWriteOnce
+    size: 5Gi
+    globalMounts:
+      - path: /config
+  configuration:
+    type: configMap
+    identifier: config
+    advancedMounts:
+      home-assistant:
+        app:
+          - { path: /config/configuration.yaml, subPath: configuration.yaml, readOnly: true }
