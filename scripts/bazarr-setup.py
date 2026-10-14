@@ -14,7 +14,7 @@ import json, os, sys, time, urllib.error, urllib.parse, urllib.request
 B = 'http://127.0.0.1:16767/api'
 SVC = 'media.svc.cluster.local'
 # no account needed; OpenSubtitles.com (best coverage) needs a login and can be added later
-PROVIDERS = ['podnapisi', 'gestdown', 'tvsubtitles', 'yifysubtitles']
+PROVIDERS = ['podnapisi', 'gestdown', 'yifysubtitles']   # tvsubtitles dropped 2026-10: its search page 404s
 PROFILE = {'profileId': 1, 'name': 'English', 'cutoff': None, 'mustContain': [], 'mustNotContain': [],
            'originalFormat': False, 'tag': None,
            'items': [{'id': 1, 'language': 'en', 'hi': 'False', 'forced': 'False',

@@ -32,7 +32,7 @@ configMaps:
       config.yaml: |
         general:
           log_level: INFO
-          test_run: true            # TODO: flip to false after reviewing what it would remove
+          test_run: false           # dry run reviewed 2026-10-14: only genuinely stalled downloads flagged
           timer: 10                 # minutes between runs
           private_tracker_handling: remove
           public_tracker_handling: remove
