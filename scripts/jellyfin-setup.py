@@ -8,7 +8,7 @@ stdout when --emit-keys is given (the caller pipes them into Vault; nothing else
 import json, os, sys, time, urllib.parse, urllib.request, urllib.error
 
 ROOT = 'http://127.0.0.1:18096'
-BASE_URL = '/4orr'   # unadvertised path: dagaflix.com/4orr, jellyfin.lab.internal/4orr (gateways route only this)
+BASE_URL = ''   # served from /; hidden by subdomain instead (popcorn.dagaflix.com). A path broke some TV apps.
 USER, PW = os.environ['JF_USER'], os.environ['JF_PASSWORD']
 EMIT = '--emit-keys' in sys.argv
 ROTATE = [a.split('=', 1)[1] for a in sys.argv if a.startswith('--rotate=')]   # e.g. --rotate=homepage
@@ -29,12 +29,16 @@ def call(method, path, body=None, token=None, raw=False):
     except urllib.error.HTTPError as e:
         return e.code, e.read().decode()[:300]
 
-# 0) a fresh install serves from /, a configured one only under BASE_URL (/ just redirects)
-try:
-    urllib.request.urlopen(ROOT + BASE_URL + '/System/Info/Public', timeout=10)
-    B = ROOT + BASE_URL
-except urllib.error.URLError:
-    B = ROOT
+# 0) a fresh install serves from /; a server still on the old /4orr BaseUrl only under it. Try /4orr first:
+# on such a server / redirects into /4orr, so probing / would wrongly succeed.
+B = ROOT
+for base in ('/4orr', BASE_URL):
+    try:
+        urllib.request.urlopen(ROOT + base + '/System/Info/Public', timeout=10)
+        B = ROOT + base
+        break
+    except urllib.error.URLError:
+        pass
 log(f'api base: {B}')
 
 # 1) startup wizard (only while not completed)

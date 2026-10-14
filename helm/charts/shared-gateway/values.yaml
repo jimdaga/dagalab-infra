@@ -15,12 +15,14 @@ certificate:
 
 # HTTPRoutes: <host>.<domain> (or the bare domain when host is empty) -> service:port in namespace,
 # optionally only under pathPrefix. `name` defaults to host; must not collide with lan-gateway's <host>-lan.
-# Jellyfin lives under an unadvertised path (its BaseUrl); clients use https://dagaflix.com/4orr.
+# Jellyfin lives on an unadvertised subdomain (wildcard DNS + wildcard cert, so the name is in neither
+# Cloudflare's per-host records nor CT logs). Not a sub-path: some TV apps (Trovu) ignore a server path.
 routes:
-  - { name: jellyfin, host: "", pathPrefix: /4orr, namespace: media, service: jellyfin, port: 8096 }
+  - { name: jellyfin, host: popcorn, namespace: media, service: jellyfin, port: 8096 }
 
-# Every other path on the bare domain gets this page straight from Envoy, so scanners see nothing
-# that identifies the server. The body is an Envoy format string: never use a percent sign in it.
+# Every other hostname (bare domain, any made-up subdomain, the raw IP) gets this page straight from
+# Envoy, so scanners see nothing that identifies the server. The body is an Envoy format string: never
+# use a percent sign in it.
 placeholder:
   title: dagaflix.com
   text: dagaflix.com

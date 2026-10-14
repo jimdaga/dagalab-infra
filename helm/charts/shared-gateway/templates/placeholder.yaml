@@ -19,7 +19,7 @@ spec:
         p{margin:0 0 2rem;color:#000;font:14px/1.4 system-ui,sans-serif}</style>
         </head><body><p>{{ .text }}</p></body></html>
 ---
-# Lowest-precedence route on the bare domain: longer path prefixes (the app routes) win
+# Catch-all: no hostnames, so it serves every Host without its own route (exact hostnames win)
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:
@@ -29,8 +29,6 @@ spec:
   parentRefs:
     - name: {{ $.Values.gateway.name }}
       sectionName: https
-  hostnames:
-    - {{ $.Values.domain | quote }}
   rules:
     - matches:
         - path:

@@ -121,7 +121,7 @@ for name, a in APPS.items():
     if jf is None:
         st, schema = call(u, k, 'GET', '/notification/schema')
         jf = next(c for c in schema if c['implementation'] == 'MediaBrowser')
-    jwant = {'host': f'jellyfin.{SVC}', 'port': 8096, 'urlBase': '/4orr', 'useSsl': False, 'apiKey': os.environ['JELLYFIN_KEY'], 'notify': False, 'updateLibrary': True}
+    jwant = {'host': f'jellyfin.{SVC}', 'port': 8096, 'urlBase': '', 'useSsl': False, 'apiKey': os.environ['JELLYFIN_KEY'], 'notify': False, 'updateLibrary': True}
     events = [e for e in ('onDownload', 'onUpgrade', 'onImportComplete', 'onRename', 'onSeriesAdd', 'onSeriesDelete', 'onEpisodeFileDelete',
                           'onEpisodeFileDeleteForUpgrade', 'onMovieAdded', 'onMovieDelete', 'onMovieFileDelete', 'onMovieFileDeleteForUpgrade')
               if e in jf and jf.get('supports' + e[0].upper() + e[1:], False)]

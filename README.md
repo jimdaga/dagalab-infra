@@ -36,7 +36,7 @@ Lab VLAN 3 on the UniFi Cloud Gateway Ultra: `192.168.3.0/24`.
 | 192.168.3.100 | bastion.lab.internal: Raspberry Pi, Ubuntu (static, `scripts/host-config.sh`; tooling in `bastion/`) |
 | 192.168.3.101–199 | UniFi DHCP pool. UniFi defaults a new network to .6–.254, so shrink it to this range: fixed-IP reservations protect the four hosts, but the API VIP (.10) and the MetalLB pool have no MAC to reserve against. |
 | 192.168.3.200–229 | MetalLB pool. **Must be outside the DHCP pool.** |
-| 192.168.3.200 | Public shared gateway (`helm/charts/shared-gateway`): the UCG forwards WAN TCP 443 here. Only Jellyfin at `dagaflix.com/4orr`; every other path gets a blank placeholder page, `www` redirects to the bare domain. Platform UIs never go on it |
+| 192.168.3.200 | Public shared gateway (`helm/charts/shared-gateway`): the UCG forwards WAN TCP 443 here. Only Jellyfin at `popcorn.dagaflix.com`; every other hostname (bare domain, made-up subdomains, raw IP) gets a blank placeholder page, `www` redirects to the bare domain. Platform UIs never go on it |
 | 192.168.3.201 | LAN gateway: `https://<app>.lab.internal` (`helm/charts/lan-gateway`) |
 
 `dagaflix.com` is a DNS-only Cloudflare A record kept at the WAN IP by `cloudflare-ddns` (Jellyfin streams direct; Cloudflare's proxy terms don't allow video). The certificate comes from Let's Encrypt via Cloudflare DNS-01, so no port 80 is forwarded.
@@ -84,7 +84,7 @@ Two zones, two owners:
 | 0 | kube-prometheus-stack | Prometheus, Alertmanager, Grafana |
 | -1 | media-storage | Static NFS PV/PVC `media/media-data` → daga-nas `192.168.3.21`, shared by all media apps; plus `jellyfin-trickplay` (`/volume2/trickplay`) |
 | 0 | prowlarr | Indexer manager; API key from Vault (`secret/prowlarr`), synced to Radarr/Sonarr |
-| 0 | jellyfin | Media server: library read-only from `media-data`, Quick Sync via the GPU plugin; `https://` and plain `http://jellyfin.lab.internal/4orr` (BaseUrl `/4orr`) |
+| 0 | jellyfin | Media server: library read-only from `media-data`, Quick Sync via the GPU plugin; `https://` and plain `http://jellyfin.lab.internal` |
 | 0 | seerr | Request UI (Jellyfin sign-in) → Radarr/Sonarr; `https://seerr.lab.internal` |
 | 0 | radarr | Movies → `/data/movies`; config on Longhorn, API key from Vault |
 | 0 | sonarr | TV → `/data/tv`; config on Longhorn, API key from Vault |
@@ -109,7 +109,7 @@ ingress-nginx was retired in March 2026, and Gateway API is where things are hea
 
 | URL | App |
 |---|---|
-| `jellyfin.lab.internal/4orr` | Jellyfin (also plain `http://` for TV apps; the bare host redirects to `/4orr/web/`) |
+| `jellyfin.lab.internal` | Jellyfin (also plain `http://` for TV apps) |
 | `seerr.lab.internal` | Seerr (requests) |
 | `homepage.lab.internal` | Homepage: dashboard linking everything below, with cluster/node CPU+memory and pod status (read-only ClusterRole), Longhorn usage, Sonarr/Radarr release calendar, VPN status (Gluetun control server, API key from Vault `secret/gluetun`). Config in `argocd/apps/homepage/values.yaml` |
 | `homarr.lab.internal` | Homarr (trial): same services as Homepage as a drag-and-drop board with live integrations (Jellyfin now playing, Seerr requests, calendar, downloads, VPN, Prowlarr, Bazarr, missing media). Config is in its SQLite DB on Longhorn, **not** in git; seeded by `scripts/homarr-setup.sh` (admin `jim`, password + API key in Vault `secret/homarr`); `scripts/homarr-board.py` lays out four boards shown as header tabs (Home, Library, Downloads, Platform; re-runnable, resets UI edits) |
@@ -179,7 +179,7 @@ Deploy order, so Jellyfin scans an already clean, ID-tagged library once:
    - **Hardware transcoding**: every node is an i7-9700 with UHD 630 (Quick Sync, `i915`, `/dev/dri/renderD128`, `render` GID 991): H.264 + HEVC 8/10-bit, no AV1. Deploy Intel's GPU device plugin (`gpu.intel.com/i915`, shared) so Jellyfin can schedule on any node.
    - **Local only for now**: `https://jellyfin.lab.internal` through the LAN gateway (192.168.3.201; add a route in `helm/charts/lan-gateway/values.yaml`). TVs on the main LAN won't auto-discover across VLANs; enter the server URL once per client. TV apps can't install the homelab CA, so Jellyfin will likely also need a plain-HTTP route (decide when deploying it).
    - Libraries: Movies (`/data/movies`), Shows (`/data/tv`), Home Videos (`/data/theme-parks`).
-   - **Public**: `https://dagaflix.com/4orr` through the shared gateway (192.168.3.200, UCG port forward WAN 443). Jellyfin's BaseUrl is `/4orr` (set by `jellyfin-setup.py`), so every client, LAN included, uses the `/4orr` path; `dagaflix.com` itself and every other path serve a blank page that doesn't identify the server. In-cluster consumers (Homepage, Homarr, Seerr, Sonarr/Radarr via `arr-wire.py`) use `http://jellyfin.media.svc.cluster.local:8096/4orr`. Same accounts as on the LAN; set Jellyfin's Networking → Known proxies to the pod network so it sees real client IPs.
+   - **Public**: `https://popcorn.dagaflix.com` through the shared gateway (192.168.3.200, UCG port forward WAN 443). The subdomain is unadvertised: DNS is a wildcard (`*.dagaflix.com`, kept current by `cloudflare-ddns`) and the cert is a wildcard, so the name shows up in neither DNS enumeration nor CT logs, and `dagaflix.com`, any other name and the raw IP serve a blank page that doesn't identify the server. (It was a `/4orr` BaseUrl first; some TV apps, e.g. Trovu, ignore a server path, so Jellyfin serves from `/` again.) In-cluster consumers (Homepage, Homarr, Seerr, Sonarr/Radarr via `arr-wire.py`) use `http://jellyfin.media.svc.cluster.local:8096`. Same accounts as on the LAN; set Jellyfin's Networking → Known proxies to the pod network so it sees real client IPs.
 
 5. **Seerr** (`https://seerr.lab.internal`): deployed. `scripts/seerr-setup.sh` signs in with the Jellyfin admin (Seerr admin = Jellyfin `jim`), enables Movies + Shows, adds Radarr/Sonarr (Recyclarr profiles: `HD Bluray + WEB` / `WEB-1080p`) and stores Seerr's API key in Vault `secret/seerr`. Household members sign in with their Jellyfin accounts; approved requests are monitored + searched by Radarr/Sonarr.
 6. **Supporting apps** (all in `media`, all deployed 2026-10-12):

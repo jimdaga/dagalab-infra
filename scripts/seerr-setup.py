@@ -32,7 +32,7 @@ log(f'seerr initialized: {initialized}')
 # 1) sign in with the Jellyfin admin (first time this also creates Seerr's admin + Jellyfin settings)
 login = {'username': os.environ['JF_USER'], 'password': os.environ['JF_PASSWORD']}
 if not initialized:
-    login.update(hostname=f'jellyfin.{SVC}', port=8096, useSsl=False, urlBase='/4orr', email='jim@lab.internal', serverType=2)
+    login.update(hostname=f'jellyfin.{SVC}', port=8096, useSsl=False, urlBase='', email='jim@lab.internal', serverType=2)
 st, r = call('POST', '/auth/jellyfin', login)
 if st == 500 and 'already configured' in str(r):
     # a previous partial run saved the Jellyfin server; a plain sign-in is enough now
@@ -43,8 +43,8 @@ log(f'signed in as {login["username"]} (Jellyfin)')
 
 # 2) Jellyfin settings: external URL for "watch in Jellyfin" links (writable fields only)
 st, jf = call('GET', '/settings/jellyfin')
-body = dict(ip=f'jellyfin.{SVC}', port=8096, useSsl=False, urlBase='/4orr',
-            externalHostname='https://jellyfin.lab.internal/4orr', jellyfinForgotPasswordUrl=jf.get('jellyfinForgotPasswordUrl', ''),
+body = dict(ip=f'jellyfin.{SVC}', port=8096, useSsl=False, urlBase='',
+            externalHostname='https://jellyfin.lab.internal', jellyfinForgotPasswordUrl=jf.get('jellyfinForgotPasswordUrl', ''),
             apiKey=os.environ['JF_KEY'])
 if any(jf.get(k) != v for k, v in body.items()):
     st, r = call('POST', '/settings/jellyfin', body)

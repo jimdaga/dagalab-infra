@@ -1,7 +1,11 @@
 # A records kept at the current public IPv4 (the FIOS lease can change). Not proxied:
 # Jellyfin streams direct, and Cloudflare's proxy terms don't allow video.
+# Wildcard: every name resolves, so DNS can't be used to find the Jellyfin subdomain (the gateway
+# answers unknown names with the placeholder). www has its own record (redirect), so it's listed too.
 domains:
   - dagaflix.com
+  - "*.dagaflix.com"
+  - www.dagaflix.com
 
 image: favonia/cloudflare-ddns:1.17.1
 

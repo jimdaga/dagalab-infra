@@ -57,7 +57,7 @@ def trpc(proc, data=None, query=False):
 
 E = os.environ
 INTEGRATIONS = [  # (sourceId, kind, name, internal url, secrets, public href)
-    ('jellyfin', 'jellyfin', 'Jellyfin', f'http://jellyfin.{SVC}:8096/4orr', {'apiKey': E['JELLYFIN_KEY']}, 'https://jellyfin.lab.internal/4orr/web/'),
+    ('jellyfin', 'jellyfin', 'Jellyfin', f'http://jellyfin.{SVC}:8096', {'apiKey': E['JELLYFIN_KEY']}, 'https://jellyfin.lab.internal'),
     ('seerr', 'seerr', 'Seerr', f'http://seerr.{SVC}:5055', {'apiKey': E['SEERR_KEY']}, 'https://seerr.lab.internal'),
     ('sonarr', 'sonarr', 'Sonarr', f'http://sonarr.{SVC}:8989', {'apiKey': E['SONARR_KEY']}, 'https://sonarr.lab.internal'),
     ('radarr', 'radarr', 'Radarr', f'http://radarr.{SVC}:7878', {'apiKey': E['RADARR_KEY']}, 'https://radarr.lab.internal'),
