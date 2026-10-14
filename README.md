@@ -159,7 +159,7 @@ ingress-nginx was retired in March 2026, and Gateway API is where things are hea
    # Every secret is optional and re-runnable; Grafana's password is generated if unset.
    ```
    vault-1/2 join raft and auto-unseal on their own. The remaining waves then sync.
-6. Once the staging cert issues, flip `certificate.issuer` in `helm/charts/shared-gateway/values.yaml` to `letsencrypt-prod`.
+6. The shared gateway uses `letsencrypt-prod` (staging verified 2026-10-13). After a rebuild, staging first is safer if DNS-01 is in doubt.
 
 ## Media stack plan
 
