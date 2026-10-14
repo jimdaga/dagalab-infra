@@ -134,11 +134,12 @@ LEOMINSTER = {'name': 'Leominster', 'latitude': 42.5274, 'longitude': -71.7563}
 OPTIONS = {
     'clock': {'customTimeFormat': 'h:mm A', 'showDate': True},
     'weather': {'isFormatFahrenheit': True, 'location': LEOMINSTER, 'showCity': True, 'hasForecast': False},
+    'healthMonitoring': {'fahrenheit': True},
 }
 
-def widget(kind, integration=None):
+def widget(kind, integration=None, **opts):
     t = templates.get(kind) or {'integrationIds': [integrations[integration]['id']]}   # new widget kinds start blank
-    return {'kind': kind, 'options': {**(t.get('options') or {}), **OPTIONS.get(kind, {})},
+    return {'kind': kind, 'options': {**(t.get('options') or {}), **OPTIONS.get(kind, {}), **opts},
             'integrationIds': t.get('integrationIds') or [], 'advancedOptions': t.get('advancedOptions') or {}}
 
 def launcher(name):
@@ -168,7 +169,8 @@ LAYOUT = {
         *launchers(('Kubernetes', 'Argo CD', 'Grafana', 'Longhorn', 'Vault'), 0, 0),
         *launchers(('Homepage', 'UniFi', 'daga-nas (DSM)', 'dagalab-infra', 'Proton Mail'), 0, 1),
         (widget('healthMonitoring', 'daga-nas'), 0, 2, 4, 2), (widget('systemDisks', 'daga-nas'), 4, 2, 2, 2),
-        (widget('networkControllerSummary', 'UniFi'), 6, 2, 2, 2), (widget('networkControllerStatus', 'UniFi'), 8, 2, 2, 2),
+        (widget('networkControllerSummary', 'UniFi'), 6, 2, 2, 2), (widget('networkControllerStatus', 'UniFi', content='wifi'), 8, 2, 2, 2),
+        (widget('systemResources', 'daga-nas'), 0, 4, 8, 2), (widget('networkControllerStatus', 'UniFi', content='wired'), 8, 4, 2, 2),
     ],
 }
 
