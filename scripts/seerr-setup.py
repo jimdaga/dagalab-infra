@@ -99,10 +99,15 @@ arr('sonarr', 8989, os.environ['SONARR_KEY'], '/data/tv',
 # 5) application URL + finish the setup wizard
 MAIN_RW = ('appLanguage', 'applicationTitle', 'applicationUrl', 'hideAvailable', 'hideRequested', 'partialRequestsEnabled',
            'localLogin', 'mediaServerType', 'newPlexLogin', 'defaultPermissions', 'enableSpecialEpisodes', 'versionCheck')
+# New users (anyone signing in with a Jellyfin account) get REQUEST only: their requests wait for approval.
+# Only the admin (jim) auto-approves. Never grant AUTO_APPROVE* or MANAGE_REQUESTS by default.
+DEFAULT_PERMISSIONS = 32   # Permission.REQUEST
 st, main = call('GET', '/settings/main')
-if main.get('applicationUrl') != 'https://seerr.lab.internal' or main.get('applicationTitle') != 'dagalab':
+if (main.get('applicationUrl') != 'https://seerr.lab.internal' or main.get('applicationTitle') != 'dagalab'
+        or main.get('defaultPermissions') != DEFAULT_PERMISSIONS):
     body = {k: main[k] for k in MAIN_RW if k in main}
-    body.update(applicationUrl='https://seerr.lab.internal', applicationTitle='dagalab')
+    body.update(applicationUrl='https://seerr.lab.internal', applicationTitle='dagalab',
+                defaultPermissions=DEFAULT_PERMISSIONS)
     st, r = call('POST', '/settings/main', body)
     log(f'main settings: {st} {r if st >= 300 else ""}')
 # Seerr sits behind the LAN gateway (Envoy sets X-Forwarded-For): trust it so Seerr sees real client IPs.
