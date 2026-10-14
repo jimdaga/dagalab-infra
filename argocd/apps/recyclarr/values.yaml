@@ -42,18 +42,25 @@ configMaps:
           sonarr:
             base_url: http://sonarr.media.svc.cluster.local:8989
             api_key: !env_var SONARR_API_KEY
+            # Size caps in MB/min (Recyclarr fills unset values from TRaSH; its max/preferred are unlimited, and ties
+            # then go to the bigger file). Blu-ray min lowered from TRaSH's 50.4: it rejected normal sitcom season packs.
             quality_definition:
               type: series
+              qualities:
+                - {name: WEBDL-1080p, preferred: 40, max: 100}        # ~1.8 GB pref / 4.5 GB max per 45-min episode
+                - {name: WEBRip-1080p, preferred: 40, max: 100}
+                - {name: Bluray-1080p, min: 25, preferred: 60, max: 110}
             quality_profiles:
               - trash_id: 72dae194fc92bf828f32cde7744e51a1  # WEB-1080p
                 reset_unmatched_scores:
                   enabled: true
                 # TRaSH's WEB-1080p is WEB-only; older shows mostly exist as Blu-ray, so allow that too (WEB preferred).
                 # Upgrades stop once either is reached, so a Blu-ray grab isn't churned for quality alone.
+                # until_score 0: no re-downloads just for a better-scored release group (saves tracker ratio).
                 upgrade:
                   allowed: true
                   until_quality: Bluray-1080p
-                  until_score: 10000
+                  until_score: 0
                 qualities:
                   - name: WEB 1080p
                     qualities: [WEBDL-1080p, WEBRip-1080p]
@@ -69,10 +76,21 @@ configMaps:
             api_key: !env_var RADARR_API_KEY
             quality_definition:
               type: movie
+              qualities:
+                - {name: Bluray-1080p, preferred: 90, max: 160}       # ~11 GB pref / 19 GB max for a 2h movie
+                - {name: WEBDL-1080p, preferred: 60, max: 160}        # ~7 GB pref
+                - {name: WEBRip-1080p, preferred: 60, max: 160}
+                - {name: Bluray-720p, preferred: 50, max: 100}
             quality_profiles:
               - trash_id: d1d67249d3890e49bc12e275d989a7e9  # HD Bluray + WEB
                 reset_unmatched_scores:
                   enabled: true
+                # Stop at WEB-1080p (Blu-ray ranks above it, so it counts too): no WEB -> Blu-ray re-download,
+                # and no re-grabs for a better-scored release group. 720p files still upgrade once.
+                upgrade:
+                  allowed: true
+                  until_quality: WEB 1080p
+                  until_score: 0
             custom_format_groups:
               add:
                 - trash_id: f8bf8eab4617f12dfdbd16303d8da245  # [Optional] Golden Rule HD
