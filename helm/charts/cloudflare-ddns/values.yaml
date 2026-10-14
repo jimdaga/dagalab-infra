@@ -1,0 +1,11 @@
+# A records kept at the current public IPv4 (the FIOS lease can change). Not proxied:
+# Jellyfin streams direct, and Cloudflare's proxy terms don't allow video.
+domains:
+  - dagaflix.com
+
+image: favonia/cloudflare-ddns:1.17.1
+
+# Secret in this namespace, synced from Vault secret/cloudflare by helm/charts/secret-stores
+apiTokenSecret:
+  name: cloudflare-api-token
+  key: api-token

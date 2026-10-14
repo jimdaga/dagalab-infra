@@ -9,6 +9,8 @@ spec:
     kubernetes:
       envoyService:
         type: LoadBalancer
+        # keep the client's source IP (the UCG port-forward doesn't SNAT) for logs and Jellyfin
+        externalTrafficPolicy: Local
         {{- with .Values.gateway.loadBalancerIP }}
         annotations:
           metallb.io/loadBalancerIPs: {{ . }}

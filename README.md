@@ -1,6 +1,6 @@
 # dagalab-infra
 
-GitOps config for the dagalab homelab: a 3-node RKE2 cluster on Ubuntu 26.04 managed by Argo CD (app-of-apps, mostly upstream Helm charts). Apps live on `jimdaga.dev`; machines on `lab.internal`.
+GitOps config for the dagalab homelab: a 3-node RKE2 cluster on Ubuntu 26.04 managed by Argo CD (app-of-apps, mostly upstream Helm charts). UIs live on `<app>.lab.internal` (LAN only); Jellyfin is public at `dagaflix.com`; `jimdaga.dev` is reserved for lab experiments.
 
 ## Layout
 
@@ -36,10 +36,10 @@ Lab VLAN 3 on the UniFi Cloud Gateway Ultra: `192.168.3.0/24`.
 | 192.168.3.100 | bastion.lab.internal: Raspberry Pi, Ubuntu (static, `scripts/host-config.sh`; tooling in `bastion/`) |
 | 192.168.3.101–199 | UniFi DHCP pool. UniFi defaults a new network to .6–.254, so shrink it to this range: fixed-IP reservations protect the four hosts, but the API VIP (.10) and the MetalLB pool have no MAC to reserve against. |
 | 192.168.3.200–229 | MetalLB pool. **Must be outside the DHCP pool.** |
-| 192.168.3.200 | Shared gateway (`*.jimdaga.dev`, parked until the Cloudflare move) |
+| 192.168.3.200 | Public shared gateway (`helm/charts/shared-gateway`): the UCG forwards WAN TCP 443 here. Only Jellyfin (`dagaflix.com`); platform UIs never go on it |
 | 192.168.3.201 | LAN gateway: `https://<app>.lab.internal` (`helm/charts/lan-gateway`) |
 
-external-dns publishes `<app>.jimdaga.dev → 192.168.3.200` to Cloudflare (DNS-only), so names resolve anywhere but only work on the LAN/VPN.
+`dagaflix.com` is a DNS-only Cloudflare A record kept at the WAN IP by `cloudflare-ddns` (Jellyfin streams direct; Cloudflare's proxy terms don't allow video). The certificate comes from Let's Encrypt via Cloudflare DNS-01, so no port 80 is forwarded.
 
 ### Switching
 
@@ -54,12 +54,13 @@ Two zones, two owners:
 | Names | Answered by | How records get there |
 |-------|-------------|-----------------------|
 | `<host>.lab.internal` (machines) | UniFi gateway (192.168.3.1) | Static hosts (nodes, bastion) need a manual UniFi DNS record; DHCP clients register automatically |
-| `<app>.jimdaga.dev` (cluster apps) | Cloudflare | external-dns |
+| `dagaflix.com` (public Jellyfin) | Cloudflare (registered at IONOS) | `cloudflare-ddns` |
+| `<app>.jimdaga.dev` (later) | IONOS for now | external-dns once the zone moves to Cloudflare |
 
 - VLAN 3 network settings in UniFi: set **Domain Name** to `lab.internal`, so DHCP clients get it as their search domain and it's appended to their registered names.
 - Local DNS records in UniFi: `k8s`, `dagakube01`–`03`, and `bastion` under `lab.internal` (see the Network table).
 - `.internal` is reserved by ICANN for private networks, so these names never leak to or collide with public DNS.
-- **Prerequisite:** `jimdaga.dev` is currently on IONOS nameservers (`ui-dns.*`). Move the domain's nameservers to Cloudflare before external-dns or cert-manager DNS-01 will work.
+- `jimdaga.dev` is still on IONOS nameservers (`ui-dns.*`). Before external-dns can manage it: move its nameservers to Cloudflare, add the zone to the API token in Vault `secret/cloudflare`, and add it to `domainFilters`.
 
 
 ## Stack
@@ -78,7 +79,8 @@ Two zones, two owners:
 | -10 | external-secrets | Syncs Vault secrets into k8s Secrets |
 | -5 | secret-stores | Vault ClusterSecretStore + ExternalSecrets (Cloudflare token, Grafana admin, PIA, *arr API keys) |
 | 0 | cluster-issuers | Let's Encrypt staging + prod via Cloudflare DNS-01 |
-| 0 | external-dns | DNS records from HTTPRoutes/Services → Cloudflare |
+| 0 | cloudflare-ddns | Keeps `dagaflix.com` at the WAN IP (DNS-only) |
+| 0 | external-dns | DNS records from HTTPRoutes/Services → Cloudflare (parked) |
 | 0 | kube-prometheus-stack | Prometheus, Alertmanager, Grafana |
 | -1 | media-storage | Static NFS PV/PVC `media/media-data` → daga-nas `192.168.3.21`, shared by all media apps; plus `jellyfin-trickplay` (`/volume2/trickplay`) |
 | 0 | prowlarr | Indexer manager; API key from Vault (`secret/prowlarr`), synced to Radarr/Sonarr |
@@ -91,7 +93,7 @@ Two zones, two owners:
 | 0 | homepage | LAN dashboard (gethomepage.dev), *arr widgets via Vault API keys |
 | 0 | homarr | Trial alternative dashboard (homarr.dev), compared against Homepage; config lives in its DB |
 | 5 | lan-gateway | LAN-only Envoy Gateway on 192.168.3.201: HTTPS `*.lab.internal` routes to the admin/media UIs; owns the cluster GatewayClass |
-| 5 | shared-gateway | GatewayClass, shared Gateway, wildcard cert, HTTPRoutes for UIs |
+| 5 | shared-gateway | Public Gateway (WAN 443), `dagaflix.com` wildcard cert, Jellyfin route |
 
 metrics-server is bundled by RKE2, so it isn't listed here. RKE2's bundled ingress-nginx is disabled.
 
@@ -177,7 +179,7 @@ Deploy order, so Jellyfin scans an already clean, ID-tagged library once:
    - **Hardware transcoding**: every node is an i7-9700 with UHD 630 (Quick Sync, `i915`, `/dev/dri/renderD128`, `render` GID 991): H.264 + HEVC 8/10-bit, no AV1. Deploy Intel's GPU device plugin (`gpu.intel.com/i915`, shared) so Jellyfin can schedule on any node.
    - **Local only for now**: `https://jellyfin.lab.internal` through the LAN gateway (192.168.3.201; add a route in `helm/charts/lan-gateway/values.yaml`). TVs on the main LAN won't auto-discover across VLANs; enter the server URL once per client. TV apps can't install the homelab CA, so Jellyfin will likely also need a plain-HTTP route (decide when deploying it).
    - Libraries: Movies (`/data/movies`), Shows (`/data/tv`), Home Videos (`/data/theme-parks`).
-   - Later: `jellyfin.jimdaga.dev` via the shared gateway once the Cloudflare move happens (see TODO).
+   - **Public**: `https://dagaflix.com` through the shared gateway (192.168.3.200, UCG port forward WAN 443). Same accounts as on the LAN; set Jellyfin's Networking → Known proxies to the pod network so it sees real client IPs.
 
 5. **Seerr** (`https://seerr.lab.internal`): deployed. `scripts/seerr-setup.sh` signs in with the Jellyfin admin (Seerr admin = Jellyfin `jim`), enables Movies + Shows, adds Radarr/Sonarr (Recyclarr profiles: `HD Bluray + WEB` / `WEB-1080p`) and stores Seerr's API key in Vault `secret/seerr`. Household members sign in with their Jellyfin accounts; approved requests are monitored + searched by Radarr/Sonarr.
 6. **Supporting apps** (all in `media`, all deployed 2026-10-12):
@@ -194,7 +196,7 @@ Deploy order, so Jellyfin scans an already clean, ID-tagged library once:
 - [ ] kube-vip for an HA API endpoint (192.168.3.10)
 - [ ] Backups: Longhorn → S3/NAS, Vault raft snapshots, RKE2 etcd snapshots off-node. Includes the *arr apps: their built-in weekly backups land in `/config/Backups` on the same Longhorn volume, so nothing is off-cluster yet
 - [ ] Remote Terraform state
-- [ ] Move `jimdaga.dev` DNS from IONOS to Cloudflare **after the NFL season** (the pick'em web app lives on that domain); then unpark cluster-issuers, external-dns, shared-gateway and expose `jellyfin.jimdaga.dev`
+- [ ] Move `jimdaga.dev` DNS from IONOS to Cloudflare **after the NFL season** (lab experiments); then unpark external-dns
 - [ ] Radarr: retry `scripts/arr-run.sh scripts/arr-import.py add` for Captain America: The Winter Soldier, Halloween (1978), Killer Klowns from Outer Space (api.radarr.video returned HTTP 500 for these ids on 2026-10-12), then `rename`
 - [ ] Radarr shows 4 unmapped folders under `/data/movies`: the 3 movies above + Forgetting Sarah Marshall (below)
 - [ ] Right-size media resources from Prometheus once there's a week of history (first look 2026-10-12, max over ~4–14h): qBittorrent has **no requests/limits** (RSS ~130 MiB; its 13 GiB "working set" is reclaimable NFS page cache, so limit on RSS, not working set); Gluetun uses ~0.45 core at ~35 MB/s (OpenVPN crypto; WireGuard would be cheaper if PIA+Gluetun allows it); Jellyfin peaks ~1 GiB / 0.8 core during transcodes (limit 6Gi); Sonarr/Radarr/Prowlarr/Seerr all well under their limits. Query: `max_over_time(container_memory_rss{namespace="media"}[7d])`, `quantile_over_time(0.95, rate(container_cpu_usage_seconds_total{namespace="media"}[5m])[7d:5m])`

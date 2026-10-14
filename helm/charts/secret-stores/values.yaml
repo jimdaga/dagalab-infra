@@ -11,7 +11,12 @@ vault:
 externalSecrets:
   - name: cloudflare-api-token
     namespace: cert-manager
-    enabled: false   # TODO: enable after seeding Vault (scripts/vault-bootstrap.sh)
+    data:
+      - secretKey: api-token
+        key: cloudflare
+        property: api-token
+  - name: cloudflare-api-token
+    namespace: cloudflare-ddns
     data:
       - secretKey: api-token
         key: cloudflare

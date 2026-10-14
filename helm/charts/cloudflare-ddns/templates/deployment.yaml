@@ -1,0 +1,47 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cloudflare-ddns
+  namespace: {{ .Release.Namespace }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: cloudflare-ddns
+  template:
+    metadata:
+      labels:
+        app: cloudflare-ddns
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+      containers:
+        - name: cloudflare-ddns
+          image: {{ .Values.image }}
+          env:
+            - name: CLOUDFLARE_API_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.apiTokenSecret.name }}
+                  key: {{ .Values.apiTokenSecret.key }}
+            - name: DOMAINS
+              value: {{ join "," .Values.domains | quote }}
+            - name: PROXIED
+              value: "false"
+            - name: IP6_PROVIDER
+              value: none
+            - name: UPDATE_CRON
+              value: "@every 5m"
+          resources:
+            requests:
+              cpu: 5m
+              memory: 16Mi
+            limits:
+              memory: 64Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]

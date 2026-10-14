@@ -3,7 +3,7 @@
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:
-  name: {{ .host }}
+  name: {{ .name | default .host }}
   namespace: {{ .namespace }}
 spec:
   parentRefs:
@@ -11,7 +11,7 @@ spec:
       namespace: {{ $.Release.Namespace }}
       sectionName: https
   hostnames:
-    - {{ printf "%s.%s" .host $.Values.domain | quote }}
+    - {{ ternary (printf "%s.%s" .host $.Values.domain) $.Values.domain (ne .host "") | quote }}
   rules:
     - backendRefs:
         - name: {{ .service }}

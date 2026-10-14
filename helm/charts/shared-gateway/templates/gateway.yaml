@@ -20,7 +20,7 @@ spec:
     - name: https
       protocol: HTTPS
       port: 443
-      hostname: {{ printf "*.%s" .Values.domain | quote }}
+      # no hostname: the wildcard cert covers both the bare domain and *.domain; routes pick hosts
       tls:
         mode: Terminate
         certificateRefs:

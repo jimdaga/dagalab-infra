@@ -1,0 +1,5 @@
+apiVersion: v2
+name: cloudflare-ddns
+description: Keeps public DNS records (DNS-only) pointed at the home WAN IP
+type: application
+version: 0.1.0

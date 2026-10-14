@@ -1,5 +1,5 @@
 apiVersion: v2
 name: shared-gateway
-description: Shared Envoy Gateway, wildcard certificate, and HTTPRoutes for platform UIs
+description: Public Envoy Gateway (WAN 443), wildcard certificate, and HTTPRoutes for internet-facing apps
 type: application
 version: 0.1.0
