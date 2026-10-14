@@ -93,9 +93,6 @@ externalSecrets:
       - secretKey: HOMEPAGE_VAR_UNIFI_PASSWORD
         key: homepage-devices
         property: unifi-password
-      - secretKey: HOMEPAGE_VAR_HA_TOKEN   # Home Assistant long-lived token "dagalab" (scripts/home-assistant-setup.sh)
-        key: home-assistant
-        property: api-token
   # Gluetun's HTTP control server: every route requires the API key (otherwise legacy routes are open)
   - name: bazarr
     namespace: media
@@ -141,6 +138,14 @@ externalSecrets:
         property: synology-password
     template:
       HOMEPAGE_VAR_SYNOLOGY_PASSWORD: '{{ .password | urlquery }}'
+  # Home Assistant long-lived token "dagalab" for Homepage's widget. Its own ExternalSecret (mounted optional): the Vault
+  # key only exists after scripts/home-assistant-setup.sh, and it mustn't hold up the `homepage` Secret on a rebuild.
+  - name: homepage-ha
+    namespace: homepage
+    data:
+      - secretKey: HOMEPAGE_VAR_HA_TOKEN
+        key: home-assistant
+        property: api-token
   # Prometheus scrapes Home Assistant's /api/prometheus with the same long-lived token
   - name: home-assistant-prometheus
     namespace: home-assistant

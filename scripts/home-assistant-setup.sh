@@ -38,5 +38,12 @@ tok=$(sed -n 's/^HA_TOKEN=//p' <<<"$out")
 if [[ -n "$tok" ]]; then
   v kv patch secret/home-assistant api-token="$tok" >/dev/null
   echo "stored Home Assistant API token in secret/home-assistant" >&2
+  # hand the new token to its consumers now instead of at the next hourly ESO refresh
+  for es in homepage/homepage-ha home-assistant/home-assistant-prometheus; do
+    kubectl -n "${es%/*}" annotate externalsecret "${es#*/}" force-sync="$(date +%s)" --overwrite >/dev/null 2>&1 || true
+  done
+  sleep 5
+  kubectl -n homepage rollout restart deploy/homepage >/dev/null 2>&1 && echo "homepage restarted (new HA token)" >&2 || true
+  echo "Homarr still has the old token: re-run scripts/homarr-board.py (or scripts/homarr-setup.sh) to refresh it" >&2
 fi
 exit $rc

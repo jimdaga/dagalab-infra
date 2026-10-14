@@ -121,8 +121,11 @@ for step, body in (('core_config', {}), ('analytics', {}), ('integration', {'cli
 
 # 2) long-lived token: keep the stored one while it works, else revoke ours and issue a new one
 cur = os.environ.get('HA_TOKEN', '')
-if cur and call('GET', HA + '/api/', token=cur)[0] == 200:
+st = call('GET', HA + '/api/', token=cur)[0] if cur else 401
+if st == 200:
     log('api token: valid, kept')
+elif st not in (401, 403):   # HA starting, port-forward hiccup: never rotate a token that may still be fine
+    sys.exit(f'api token: check returned {st}; not rotating, re-run when Home Assistant answers')
 else:
     ws = WS(T)
     for t in ws.cmd({'type': 'auth/refresh_tokens'}):

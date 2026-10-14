@@ -81,7 +81,14 @@ DEVICES = [  # name, kind, url, secrets (kind, value)
     ('Home Assistant', 'homeAssistant', 'http://home-assistant.home-assistant.svc.cluster.local:8123',
      [('apiKey', os.environ['HA_TOKEN'])]),
 ]
+REFRESH = {'Home Assistant'}   # token can be rotated by scripts/home-assistant-setup.sh: re-send it every run
 for name, kind, url, secrets in DEVICES:
+    if name in have and name in REFRESH:
+        r = trpc('integration.update', {'id': have[name]['id'], 'name': name, 'url': url, 'appId': have[name].get('appId'),
+                                        'secrets': [{'kind': k, 'value': v} for k, v in secrets]}, f'updating integration {name}')
+        if isinstance(r, dict) and r.get('error'):
+            raise SystemExit(f'integration {name}: connection test failed: {json.dumps(r["error"])[:400]}')
+        log(f'integration {name}: token refreshed')
     if name in have:
         continue
     r = trpc('integration.create', {'name': name, 'kind': kind, 'url': url, 'attemptSearchEngineCreation': False,

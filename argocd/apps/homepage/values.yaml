@@ -20,9 +20,12 @@ controllers:
           HOMEPAGE_ALLOWED_HOSTS: homepage.lab.internal
         envFrom:
           - secretRef:
-              name: homepage   # HOMEPAGE_VAR_{SONARR,RADARR,PROWLARR,JELLYFIN,SEERR,GLUETUN,BAZARR}_KEY, _UNIFI_PASSWORD, _HA_TOKEN
+              name: homepage   # HOMEPAGE_VAR_{SONARR,RADARR,PROWLARR,JELLYFIN,SEERR,GLUETUN,BAZARR}_KEY, _UNIFI_PASSWORD
           - secretRef:
               name: homepage-synology   # HOMEPAGE_VAR_SYNOLOGY_PASSWORD (URL-encoded)
+          - secretRef:
+              name: homepage-ha   # HOMEPAGE_VAR_HA_TOKEN; absent until scripts/home-assistant-setup.sh has run
+              optional: true
         # Since v2.2 the dashboard page is pre-rendered at image build and settings.yaml (title, background, layout) is
         # only applied after a revalidate (the refresh button, or POST /api/revalidate). Do it on every start; after a
         # settings.yaml-only change that doesn't roll the pod, press refresh (bottom right).
