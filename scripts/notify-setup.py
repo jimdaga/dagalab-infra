@@ -2,16 +2,17 @@
 """Discord notifications for the media apps (run by scripts/notify-setup.sh; idempotent).
 
 Env: DISCORD_ALERTS / DISCORD_MEDIA / DISCORD_NOISE (webhook URLs, from Vault secret/discord via the `discord` Secret),
-SONARR_KEY, RADARR_KEY, SEERR_KEY, BAZARR_KEY. Never prints a webhook URL or key.
+SONARR_KEY, RADARR_KEY, SEERR_KEY, BAZARR_KEY, JELLYFIN_KEY. Never prints a webhook URL or key.
 
 Each event goes to exactly one channel (Alertmanager already covers *arr health, indexer failures and Unpackerr
 failures in #alerts, so the apps don't repeat them):
   #alerts      Sonarr/Radarr: import needs manual interaction
   #media       Sonarr: release imported (one message per release, not per episode); Radarr: movie imported;
-               Seerr: request pending/auto-approved/failed, issue created/resolved
+               Seerr: request pending/auto-approved/failed, issue created/resolved;
+               Jellyfin (Webhook plugin): someone started / finished watching a movie or episode
   #media-noise Sonarr/Radarr: grabs, upgrades, deletions; Bazarr: subtitle downloaded
 """
-import json, os, re, sys, urllib.error, urllib.parse, urllib.request
+import base64, json, os, re, sys, urllib.error, urllib.parse, urllib.request
 
 HOOK = {'alerts': os.environ['DISCORD_ALERTS'], 'media': os.environ['DISCORD_MEDIA'], 'noise': os.environ['DISCORD_NOISE']}
 ok = True
@@ -89,6 +90,40 @@ else:
                  form={'notifications-providers': json.dumps({'name': 'Discord', 'enabled': True, 'url': apprise})})   # one object per field
     log(f'bazarr discord #media-noise: subtitle downloads -> HTTP {st}' + ('' if st < 300 else f' {r}'))
     ok &= st < 300
+
+# Jellyfin: watch activity via the Webhook plugin (installed from the Jellyfin Stable repo). One Discord destination:
+# a line when anyone starts a movie/episode, and one when they finish it (stops before the end send an empty body,
+# which SkipEmptyMessageBody drops). Home videos are left out. Text fields come pre-escaped for quotes; {{{ }}} stops
+# Handlebars HTML-encoding them.
+WEBHOOK_PLUGIN = '71552a5a5c5c4350a2aeebe451a30173'
+TITLE = ("{{#if_equals ItemType 'Episode'}}*{{{SeriesName}}}* S{{SeasonNumber00}}E{{EpisodeNumber00}} · {{{Name}}}"
+         "{{else}}*{{{Name}}}* ({{Year}}){{/if_equals}}")
+WATCH_TEMPLATE = (
+    "{{#if_equals NotificationType 'PlaybackStart'}}"
+    '{"username": "Jellyfin", "content": "▶️ **{{{NotificationUsername}}}** started ' + TITLE +
+    " on {{{DeviceName}}} ({{{Client}}}){{#if_equals PlayMethod 'Transcode'}} · transcoding{{/if_equals}}\"}"
+    "{{else}}{{#if_equals PlayedToCompletion 'True'}}"
+    '{"username": "Jellyfin", "content": "✅ **{{{NotificationUsername}}}** finished ' + TITLE + '"}'
+    "{{/if_equals}}{{/if_equals}}")
+WATCH_NAME = 'Discord #media (watch activity)'
+base, H = 'http://127.0.0.1:18096', {'Authorization': f'MediaBrowser Token="{os.environ["JELLYFIN_KEY"]}"'}
+st, cfg = call(base, H, 'GET', f'/Plugins/{WEBHOOK_PLUGIN}/Configuration')
+if st != 200:
+    log(f'jellyfin webhook plugin: not installed? HTTP {st}'); ok = False
+else:
+    want = dict(WebhookName=WATCH_NAME, WebhookUri=HOOK['media'], EnableWebhook=True,
+                NotificationTypes=['PlaybackStart', 'PlaybackStop'], EnableMovies=True, EnableEpisodes=True,
+                EnableSeries=False, EnableSeasons=False, EnableAlbums=False, EnableSongs=False, EnableVideos=False,
+                SendAllProperties=False, TrimWhitespace=True, SkipEmptyMessageBody=True, UserFilter=[],
+                Template=base64.b64encode(WATCH_TEMPLATE.encode()).decode(), MentionType='None', Username='Jellyfin')
+    others = [o for o in cfg.get('DiscordOptions', []) if o.get('WebhookName') != WATCH_NAME]
+    cur = next((o for o in cfg.get('DiscordOptions', []) if o.get('WebhookName') == WATCH_NAME), None)
+    if cur and all(cur.get(k) == v for k, v in want.items()):
+        log('jellyfin discord: already set')
+    else:
+        st, r = call(base, H, 'POST', f'/Plugins/{WEBHOOK_PLUGIN}/Configuration', dict(cfg, DiscordOptions=others + [want]))
+        log(f'jellyfin discord #media: playback start, finished -> HTTP {st}' + ('' if st < 300 else f' {r}'))
+        ok &= st < 300
 
 # test message to each channel
 if '--test' in sys.argv:
