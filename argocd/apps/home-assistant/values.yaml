@@ -1,8 +1,8 @@
 # Home Assistant: home automation. LAN only: https://home.lab.internal (helm/charts/lan-gateway).
 # hostNetwork: mDNS/SSDP discovery runs from the node's VLAN 3 interface and reaches the main LAN by routing
 # (not isolated from VLAN 3). Port 8123 is open on whichever node runs the pod.
-# configuration.yaml is below (git); everything made in the UI (integrations, devices, dashboards, automations)
-# lives in /config on Longhorn. First-run setup and lab integrations: scripts/home-assistant-setup.sh.
+# configuration.yaml is below and the automation packages are in helm/charts/home-assistant-packages (git);
+# everything made in the UI (integrations, devices, dashboards, automations) lives in /config on Longhorn. First-run setup and lab integrations: scripts/home-assistant-setup.sh.
 controllers:
   home-assistant:
     strategy: Recreate   # never two HA instances on one config
@@ -11,6 +11,7 @@ controllers:
       dnsPolicy: ClusterFirstWithHostNet   # still resolve *.svc.cluster.local (Jellyfin, Sonarr, Radarr)
     initContainers:
       # the UI editors write these; configuration.yaml includes them. Create only when missing, never truncate.
+      # Also (re)generates the doorbell chime in /config/www (served at /local/, fetched by the Sonos speakers).
       seed:
         image:
           repository: ghcr.io/home-assistant/home-assistant
@@ -23,6 +24,7 @@ controllers:
               p=/config/${f%%:*}.yaml
               [ -e "$p" ] || echo "${f#*:}" > "$p"
             done
+            python3 /seed/make-chime.py /config/www/doorbell.wav
     containers:
       app:
         image:
@@ -78,6 +80,7 @@ configMaps:
           currency: USD
           country: US
           internal_url: https://home.lab.internal
+          packages: !include_dir_named packages   # helm/charts/home-assistant-packages, mounted at /config/packages
 
         # No `http:` here: since 2026.10 HA keeps it in .storage (YAML is imported once, then ignored) and new config
         # must be confirmed. Proxy trust for the LAN gateway is applied + confirmed by scripts/home-assistant-setup.sh.
@@ -88,6 +91,24 @@ configMaps:
         automation: !include automations.yaml
         script: !include scripts.yaml
         scene: !include scenes.yaml
+
+      # two-tone "ding-dong" WAV, stdlib only (no audio file in git); run by the seed init container
+      make-chime.py: |
+        import math, os, struct, sys, wave
+        out, rate = sys.argv[1], 44100
+        def tone(freq, start, length):   # bell-ish: fundamental + octave, exponential decay
+            return [(int((start + i / rate) * rate), math.exp(-3 * i / rate / length) *
+                     (math.sin(2 * math.pi * freq * i / rate) + 0.3 * math.sin(4 * math.pi * freq * i / rate)))
+                    for i in range(int(rate * length))]
+        buf = [0.0] * int(rate * 2.6)
+        for pos, v in tone(659.25, 0.0, 1.0) + tone(523.25, 0.6, 2.0):   # E5 "ding", C5 "dong"
+            if pos < len(buf): buf[pos] += v
+        peak = max(abs(v) for v in buf)
+        os.makedirs(os.path.dirname(out), exist_ok=True)
+        with wave.open(out + '.tmp', 'wb') as w:
+            w.setnchannels(1); w.setsampwidth(2); w.setframerate(rate)
+            w.writeframes(b''.join(struct.pack('<h', int(v / peak * 0.8 * 32767)) for v in buf))
+        os.replace(out + '.tmp', out)
 
 serviceMonitor:
   app:
@@ -118,3 +139,14 @@ persistence:
       home-assistant:
         app:
           - { path: /config/configuration.yaml, subPath: configuration.yaml, readOnly: true }
+        seed:
+          - { path: /seed/make-chime.py, subPath: make-chime.py, readOnly: true }
+  # helm/charts/home-assistant-packages: automation packages (doorbell, movie mode), raw files so HA's {{ }}
+  # templates aren't rendered by Helm. After a change: Developer tools -> YAML -> reload Automations.
+  packages:
+    type: configMap
+    name: home-assistant-packages
+    advancedMounts:
+      home-assistant:
+        app:
+          - { path: /config/packages, readOnly: true }

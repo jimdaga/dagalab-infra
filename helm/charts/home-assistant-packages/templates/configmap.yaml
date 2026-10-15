@@ -1,0 +1,9 @@
+# Every packages/*.yaml becomes a key; the home-assistant pod mounts this ConfigMap at /config/packages
+# (configuration.yaml: `homeassistant: packages: !include_dir_named packages`). Files are copied verbatim, so HA's
+# Jinja templates stay intact. HA reads them at startup or on Developer tools -> YAML -> reload Automations.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: home-assistant-packages
+data:
+{{ (.Files.Glob "packages/*.yaml").AsConfig | indent 2 }}

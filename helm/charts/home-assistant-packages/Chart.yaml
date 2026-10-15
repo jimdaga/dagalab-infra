@@ -1,0 +1,5 @@
+apiVersion: v2
+name: home-assistant-packages
+description: Home Assistant packages (git-managed automations), mounted at /config/packages
+type: application
+version: 0.1.0

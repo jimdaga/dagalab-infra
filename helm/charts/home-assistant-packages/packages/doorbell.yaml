@@ -1,0 +1,42 @@
+# Front door ring: chime on the downstairs Sonos, flash the porch light, phone notification with the
+# Nest event snapshot (loads from home.lab.internal, so the picture only shows on the home network).
+automation:
+  - id: dagalab_doorbell
+    alias: Doorbell
+    mode: single
+    max_exceeded: silent
+    triggers:
+      - trigger: state
+        entity_id: event.front_door_front_door_chime
+        not_from: unavailable
+        not_to: [unavailable, unknown]
+    conditions:
+      - "{{ trigger.to_state.attributes.event_type == 'ring' }}"
+    actions:
+      - parallel:
+          - action: media_player.play_media
+            target:
+              entity_id: [media_player.living_room_living_room, media_player.sunroom_sunroom]
+            data:
+              media_content_id: http://home.lab.internal/local/doorbell.wav   # plain http: Sonos can't trust the lab CA
+              media_content_type: music
+              announce: true
+              extra:
+                volume: 40
+          - action: light.turn_on
+            target:
+              entity_id: light.front_door_front_door
+            data:
+              flash: long
+          - action: notify.mobile_app_jim_d_agostinos_iphone
+            data:
+              title: Doorbell
+              message: Someone's at the front door
+              data:
+                image: >-
+                  /api/nest/event_media/{{ device_id('event.front_door_front_door_chime') }}/{{
+                  trigger.to_state.attributes.nest_event_id }}/thumbnail
+                entity_id: camera.front_door_front_door
+                push:
+                  interruption-level: time-sensitive
+      - delay: 15   # one alert per visitor, not per press

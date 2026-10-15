@@ -42,4 +42,35 @@ spec:
               replaceFullPath: {{ printf "%s/web/" . }}
             statusCode: 302
     {{- end }}
+{{- if .httpPaths }}
+---
+# plain HTTP for these paths only (devices that can't trust the lab CA); the rest of the host redirects to https
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: {{ .host }}-lan-http
+  namespace: {{ .namespace }}
+spec:
+  parentRefs:
+    - name: {{ $.Values.gateway.name }}
+      namespace: {{ $.Release.Namespace }}
+      sectionName: http
+  hostnames:
+    - {{ printf "%s.%s" .host $.Values.domain | quote }}
+  rules:
+    - matches:
+        {{- range .httpPaths }}
+        - path:
+            type: PathPrefix
+            value: {{ . }}
+        {{- end }}
+      backendRefs:
+        - name: {{ .service }}
+          port: {{ .port }}
+    - filters:
+        - type: RequestRedirect
+          requestRedirect:
+            scheme: https
+            statusCode: 301
+{{- end }}
 {{- end }}

@@ -1,0 +1,51 @@
+# Movie mode: an Apple TV (any video app, Jellyfin included) starts playing -> the room's lights dim to 10%
+# warm, pause -> 50%, stop -> back to how they were. Only when a light in the room was on; music is ignored.
+# Rooms with no lights (Basement today) are skipped until lights are added to that area.
+automation:
+  - id: dagalab_movie_mode
+    alias: Movie mode
+    mode: queued
+    max: 10
+    triggers:
+      - trigger: state
+        entity_id: [media_player.living_room_living_room_2, media_player.basement_basement]
+        not_from: unavailable
+    variables:
+      area: "{{ area_id(trigger.entity_id) }}"
+      snapshot: "scene.movie_mode_{{ area }}"
+      active: "{{ expand(snapshot) | count > 0 }}"
+      # the room's real bulbs, not the Hue room group (restoring a group would overwrite the bulbs)
+      lights: >-
+        {{ area_entities(area) | select('match', 'light\.') | reject('is_state_attr', 'is_hue_group', true) | list }}
+      new: "{{ trigger.to_state.state }}"
+    conditions:
+      - "{{ area is not none and lights | count > 0 }}"
+      - "{{ new != 'playing' or state_attr(trigger.entity_id, 'media_content_type') != 'music' }}"
+    actions:
+      - choose:
+          - conditions: "{{ new == 'playing' and not active and lights | select('is_state', 'on') | list | count > 0 }}"
+            sequence:
+              - action: scene.create
+                data:
+                  scene_id: "movie_mode_{{ area }}"
+                  snapshot_entities: "{{ lights }}"
+              - action: light.turn_on
+                target: { entity_id: "{{ lights }}" }
+                data: { brightness_pct: 10, color_temp_kelvin: 2200, transition: 3 }
+          - conditions: "{{ new == 'playing' and active }}"
+            sequence:
+              - action: light.turn_on
+                target: { entity_id: "{{ lights }}" }
+                data: { brightness_pct: 10, transition: 2 }
+          - conditions: "{{ new == 'paused' and active }}"
+            sequence:
+              - action: light.turn_on
+                target: { entity_id: "{{ lights }}" }
+                data: { brightness_pct: 50, transition: 2 }
+          - conditions: "{{ new in ['idle', 'standby', 'off', 'on'] and active }}"
+            sequence:
+              - action: scene.turn_on
+                target: { entity_id: "{{ snapshot }}" }
+                data: { transition: 3 }
+              - action: scene.delete
+                target: { entity_id: "{{ snapshot }}" }
