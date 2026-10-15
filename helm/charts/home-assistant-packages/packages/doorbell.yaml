@@ -1,5 +1,5 @@
-# Front door ring: chime on the downstairs Sonos, flash the porch light, phone notification with the doorbell's
-# live view (loads from home.lab.internal, so it only shows on the home network).
+# Front door ring: chime on the downstairs Sonos, flash the porch light, phone notification that opens the
+# doorbell's live view when tapped (the app reaches home.lab.internal, so on the home network only).
 automation:
   - id: dagalab_doorbell
     alias: Doorbell
@@ -33,9 +33,9 @@ automation:
               title: Doorbell
               message: Someone's at the front door
               data:
-                # live view, not an event snapshot: this doorbell is WebRTC-only and Google can't generate stills
-                # for it ("camera not supporting RTSP")
-                entity_id: camera.front_door_front_door
+                # tap opens the live view in the app. No picture in the notification: this doorbell is WebRTC-only,
+                # Google won't generate stills for it ("camera not supporting RTSP") and HA serves a placeholder
+                url: "entityId:camera.front_door_front_door"
                 push:
                   interruption-level: time-sensitive
       - delay: 15   # one alert per visitor, not per press
