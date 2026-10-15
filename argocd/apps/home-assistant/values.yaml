@@ -92,22 +92,43 @@ configMaps:
         script: !include scripts.yaml
         scene: !include scenes.yaml
 
-      # two-tone "ding-dong" WAV, stdlib only (no audio file in git); run by the seed init container
+      # two-bar "ding-dong" door chime (E5, C5), stdlib only (no audio file in git); run by the seed init container.
+      # Modelled as struck metal bars (inharmonic partials, higher ones decay faster) plus a small room reverb.
       make-chime.py: |
         import math, os, struct, sys, wave
-        out, rate = sys.argv[1], 44100
-        def tone(freq, start, length):   # bell-ish: fundamental + octave, exponential decay
-            return [(int((start + i / rate) * rate), math.exp(-3 * i / rate / length) *
-                     (math.sin(2 * math.pi * freq * i / rate) + 0.3 * math.sin(4 * math.pi * freq * i / rate)))
-                    for i in range(int(rate * length))]
-        buf = [0.0] * int(rate * 2.6)
-        for pos, v in tone(659.25, 0.0, 1.0) + tone(523.25, 0.6, 2.0):   # E5 "ding", C5 "dong"
-            if pos < len(buf): buf[pos] += v
+        out, RATE = sys.argv[1], 44100
+        BAR = [(1.0, 1.0, 1.0), (2.756, 0.32, 0.35), (5.404, 0.10, 0.15), (8.933, 0.03, 0.08)]   # (ratio, amp, decay)
+        def strike(buf, freq, at, decay):
+            start = int(at * RATE)
+            for ratio, amp, dk in BAR:
+                w, d = 2 * math.pi * freq * ratio / RATE, decay * dk
+                for i in range(min(len(buf) - start, int(d * 6 * RATE))):
+                    t = i / RATE
+                    buf[start + i] += amp * min(1.0, t / 0.003) * math.exp(-t / d) * math.sin(w * i)
+        def reverb(buf, wet=0.18):   # Schroeder: 4 parallel combs + 2 allpasses
+            rev = [0.0] * len(buf)
+            for dl, fb in ((1557, .80), (1617, .79), (1491, .81), (1422, .78)):
+                c = [0.0] * len(buf)
+                for i, x in enumerate(buf):
+                    c[i] = x + (fb * c[i - dl] if i >= dl else 0)
+                    rev[i] += c[i] / 4
+            for dl, g in ((225, .5), (556, .5)):
+                a = [0.0] * len(rev)
+                for i, x in enumerate(rev):
+                    a[i] = -g * x + (rev[i - dl] if i >= dl else 0) + g * (a[i - dl] if i >= dl else 0)
+                rev = a
+            return [x + wet * y for x, y in zip(buf, rev)]
+        buf = [0.0] * int(3.6 * RATE)
+        strike(buf, 659.25, 0.0, 1.2)   # E5 "ding"
+        strike(buf, 523.25, 0.5, 1.8)   # C5 "dong"
+        buf = reverb(buf)
+        fade = int(0.05 * RATE)
+        for i in range(fade): buf[-1 - i] *= i / fade
         peak = max(abs(v) for v in buf)
         os.makedirs(os.path.dirname(out), exist_ok=True)
         with wave.open(out + '.tmp', 'wb') as w:
-            w.setnchannels(1); w.setsampwidth(2); w.setframerate(rate)
-            w.writeframes(b''.join(struct.pack('<h', int(v / peak * 0.8 * 32767)) for v in buf))
+            w.setnchannels(1); w.setsampwidth(2); w.setframerate(RATE)
+            w.writeframes(b''.join(struct.pack('<h', int(v / peak * 0.85 * 32767)) for v in buf))
         os.replace(out + '.tmp', out)
 
 serviceMonitor:
