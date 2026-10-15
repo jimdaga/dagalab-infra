@@ -1,5 +1,5 @@
-# Front door ring: chime on the downstairs Sonos, flash the porch light, phone notification with the
-# Nest event snapshot (loads from home.lab.internal, so the picture only shows on the home network).
+# Front door ring: chime on the downstairs Sonos, flash the porch light, phone notification with the doorbell's
+# live view (loads from home.lab.internal, so it only shows on the home network).
 automation:
   - id: dagalab_doorbell
     alias: Doorbell
@@ -33,9 +33,8 @@ automation:
               title: Doorbell
               message: Someone's at the front door
               data:
-                image: >-
-                  /api/nest/event_media/{{ device_id('event.front_door_front_door_chime') }}/{{
-                  trigger.to_state.attributes.nest_event_id }}/thumbnail
+                # live view, not an event snapshot: this doorbell is WebRTC-only and Google can't generate stills
+                # for it ("camera not supporting RTSP")
                 entity_id: camera.front_door_front_door
                 push:
                   interruption-level: time-sensitive
