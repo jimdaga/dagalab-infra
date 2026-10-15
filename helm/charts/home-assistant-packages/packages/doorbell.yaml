@@ -39,3 +39,27 @@ automation:
                 push:
                   interruption-level: time-sensitive
       - delay: 15   # one alert per visitor, not per press
+
+  # Person at the door (no ring): phone notification only, no chime or light. Fires for anyone the doorbell
+  # camera sees, family included; a 2-minute cooldown keeps one visit to one alert.
+  - id: dagalab_front_door_person
+    alias: Front door person
+    mode: single
+    max_exceeded: silent
+    triggers:
+      - trigger: state
+        entity_id: event.front_door_front_door_motion
+        not_from: unavailable
+        not_to: [unavailable, unknown]
+    conditions:
+      - "{{ trigger.to_state.attributes.event_type == 'camera_person' }}"
+    actions:
+      - action: notify.mobile_app_jim_d_agostinos_iphone
+        data:
+          title: Front door
+          message: Someone's at the front door
+          data:
+            url: "entityId:camera.front_door_front_door"   # live view; no stills (see Doorbell above)
+            push:
+              interruption-level: time-sensitive
+      - delay: 120
