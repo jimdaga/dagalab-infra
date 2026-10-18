@@ -1,15 +1,30 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
-  "extends": ["config:recommended"],
+  "extends": [
+    "config:recommended"
+  ],
   "dependencyDashboard": true,
   "argocd": {
-    "managerFilePatterns": ["/argocd/apps/.+/application\\.yaml$/"]
+    "managerFilePatterns": [
+      "/argocd/apps/.+/application\\.yaml$/"
+    ]
   },
   "packageRules": [
     {
-      "matchManagers": ["argocd"],
+      "matchManagers": [
+        "argocd"
+      ],
       "groupName": "{{depName}} chart",
-      "addLabels": ["area/dependency"]
+      "addLabels": [
+        "area/dependency"
+      ]
+    },
+    {
+      "description": "Plex tags are <version>.<build>-<hash>: order by version+build (the hash would otherwise read as a compatibility suffix and block every bump). Internet-facing: merge promptly.",
+      "matchPackageNames": [
+        "plexinc/pms-docker"
+      ],
+      "versioning": "regex:^(?<major>\\d+)\\.(?<minor>\\d+)\\.(?<patch>\\d+)\\.(?<build>\\d+)-[0-9a-f]+$"
     }
   ]
 }
