@@ -17,8 +17,8 @@ controllers:
           PLEX_UID: "1029"
           PLEX_GID: "100"
           ADVERTISE_IP: http://192.168.3.202:32400/
-          # main LAN + VLAN 3 count as local: no bandwidth limits, no relay
-          ALLOWED_NETWORKS: 192.168.0.0/16
+          # No ALLOWED_NETWORKS: the image maps it to "allowed without auth", not to "LAN Networks". Which clients
+          # count as local is Plex's LanNetworksBandwidth pref, set once in the UI/API (README "Media stack plan" 7).
         probes:
           liveness: &probe
             enabled: true

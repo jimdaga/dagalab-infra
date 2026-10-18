@@ -198,8 +198,9 @@ Deploy order, so Jellyfin scans an already clean, ID-tagged library once:
    2. Name the server (`dagalab`).
    3. Libraries: Movies → `/data/movies`, TV Shows → `/data/tv`. Nothing else (`personal/`, `iMovie/`, `youtube/` are never libraries; `theme-parks/` is Jellyfin-only).
    4. Settings → Library: **off** "Empty trash automatically after every scan" (an NFS blip mid-scan must not drop the library); "Scan my library automatically" on.
-   5. UniFi: port forward WAN TCP 32400 → 192.168.3.202:32400. Plex Settings → Remote Access → "Manually specify public port" 32400 → "Fully accessible outside your network".
-   6. Share Movies + TV with friends (Plex web → Settings → Manage Library Access).
+   5. Settings → Network → "LAN Networks" = `192.168.0.0/24,192.168.3.0/24,10.42.0.0/16` (main LAN, VLAN 3, pod network for requests via the LAN gateway; the DMZ VLAN 4 is deliberately remote). Leave "List of IP addresses and networks that are allowed without auth" **empty**: the server is internet-facing.
+   6. UniFi: port forward WAN TCP 32400 → 192.168.3.202:32400. Plex Settings → Remote Access → "Manually specify public port" 32400 → "Fully accessible outside your network".
+   7. Share Movies + TV with friends (Plex web → Settings → Manage Library Access).
 
 ## TODO
 

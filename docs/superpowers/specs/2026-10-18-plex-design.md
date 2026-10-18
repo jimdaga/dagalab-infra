@@ -33,8 +33,10 @@ plays a friend's title at home, and `https://plex.lab.internal` works on the LAN
 - Image `plexinc/pms-docker`, pinned to an exact tag (Renovate's helm-values manager bumps it).
 - Runs as DSM user `media` via the image's `PLEX_UID=1029` / `PLEX_GID=100` (its init starts as root, then drops to
   that user; root is squashed on the NFS share, so only uid 1029 can read the library).
-- `TZ=America/New_York`; `ADVERTISE_IP=http://192.168.3.202:32400/`; `ALLOWED_NETWORKS=192.168.0.0/16` (main LAN
-  and VLAN 3 count as local: no bandwidth limits, no relay).
+- `TZ=America/New_York`; `ADVERTISE_IP=http://192.168.3.202:32400/`. No `ALLOWED_NETWORKS`: the image maps it to
+  Plex's "allowed without auth" list, which on an internet-facing server would hand every listed network admin access.
+  Local vs remote is Plex's "LAN Networks" pref (`LanNetworksBandwidth`) = `192.168.0.0/24,192.168.3.0/24,10.42.0.0/16`
+  (main LAN, VLAN 3, pod network for requests via the LAN gateway); VLAN 4 (DMZ) is deliberately not local.
 - Strategy `Recreate`: never two Plex instances on one database.
 - CPU only; requests `500m` / `1Gi`, memory limit `4Gi`.
 - Probes: HTTP `GET /identity` on 32400 for liveness/readiness; startup probe allows ~5 minutes (first start
