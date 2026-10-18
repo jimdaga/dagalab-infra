@@ -22,6 +22,7 @@ routes:
   - { host: home,     namespace: home-assistant,  service: home-assistant,                port: 8123, httpPaths: [/local/] }
   # http: true also serves plain http://<host> (no redirect): TV apps can't install the homelab CA.
   - { host: jellyfin, namespace: media,           service: jellyfin,                      port: 8096, http: true }
+  - { host: plex,     namespace: media,           service: plex,                          port: 32400 }
   - { host: seerr,    namespace: media,           service: seerr,                         port: 5055 }
   - { host: torrent,  namespace: media,           service: qbittorrent,                   port: 8080 }
   - { host: sonarr,   namespace: media,           service: sonarr,                        port: 8989 }

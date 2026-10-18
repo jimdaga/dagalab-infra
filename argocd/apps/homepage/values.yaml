@@ -159,6 +159,13 @@ configMaps:
                   enableNowPlaying: true    # active streams, with pause/resume
                   enableUser: true
                   showEpisodeNumber: true
+            - Plex:
+                href: https://plex.lab.internal
+                icon: plex.png
+                description: Watch with friends
+                namespace: media
+                app: plex
+                siteMonitor: http://plex.media.svc.cluster.local:32400/identity
             - Seerr:
                 href: https://seerr.lab.internal
                 icon: jellyseerr.png
