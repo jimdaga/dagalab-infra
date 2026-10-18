@@ -1,0 +1,80 @@
+# Plex Media Server: Movies + TV shared with friends (they have Plex Pass; this server doesn't, so no hardware
+# transcoding, LAN included: CPU only, and the GPU share stays with Jellyfin). LAN UI: https://plex.lab.internal.
+# Direct remote access: dedicated MetalLB IP 192.168.3.202:32400, which the UCG forwards from WAN TCP 32400 (the
+# second internet-facing service; it bypasses Envoy and the .200 gateway). Library is the shared NFS claim,
+# READ-ONLY; Plex's DB/metadata on Longhorn. One-time claim/libraries/sharing: README "Plex".
+controllers:
+  plex:
+    strategy: Recreate   # never two Plex instances on one database
+    containers:
+      app:
+        image:
+          repository: plexinc/pms-docker
+          tag: 1.43.4.10903-e5521bd8c
+        env:
+          TZ: America/New_York
+          # the image's init starts as root, then runs Plex as DSM user `media` (root is squashed on the NFS share)
+          PLEX_UID: "1029"
+          PLEX_GID: "100"
+          ADVERTISE_IP: http://192.168.3.202:32400/
+          # main LAN + VLAN 3 count as local: no bandwidth limits, no relay
+          ALLOWED_NETWORKS: 192.168.0.0/16
+        probes:
+          liveness: &probe
+            enabled: true
+            custom: true
+            spec:
+              httpGet:
+                path: /identity
+                port: 32400
+              periodSeconds: 30
+              failureThreshold: 5
+          readiness: *probe
+          startup:
+            enabled: true
+            custom: true
+            spec:
+              httpGet:
+                path: /identity
+                port: 32400
+              periodSeconds: 10
+              failureThreshold: 30   # first start initialises the database
+        resources:
+          requests:
+            cpu: 500m
+            memory: 1Gi
+          limits:
+            memory: 4Gi
+
+service:
+  app:
+    controller: plex
+    type: LoadBalancer
+    annotations:
+      metallb.io/loadBalancerIPs: 192.168.3.202
+    externalTrafficPolicy: Local   # real client IPs, so Plex can tell LAN from remote
+    ports:
+      http:
+        port: 32400
+
+persistence:
+  # Plex DB + metadata: Longhorn, never NFS
+  config:
+    type: persistentVolumeClaim
+    accessMode: ReadWriteOnce
+    size: 30Gi
+    globalMounts:
+      - path: /config
+  # transcodes: node-local scratch
+  transcode:
+    type: emptyDir
+    sizeLimit: 20Gi
+    globalMounts:
+      - path: /transcode
+  # libraries: Movies /data/movies, TV /data/tv
+  data:
+    type: persistentVolumeClaim
+    existingClaim: media-data
+    globalMounts:
+      - path: /data
+        readOnly: true
