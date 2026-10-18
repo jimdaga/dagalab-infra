@@ -38,6 +38,7 @@ Lab VLAN 3 on the UniFi Cloud Gateway Ultra: `192.168.3.0/24`.
 | 192.168.3.200–229 | MetalLB pool. **Must be outside the DHCP pool.** |
 | 192.168.3.200 | Public shared gateway (`helm/charts/shared-gateway`): the UCG forwards WAN TCP 443 here. Only Jellyfin at `popcorn.dagaflix.com`; every other hostname (bare domain, made-up subdomains, raw IP) gets a blank placeholder page, `www` redirects to the bare domain. Platform UIs never go on it |
 | 192.168.3.201 | LAN gateway: `https://<app>.lab.internal` (`helm/charts/lan-gateway`) |
+| 192.168.3.202 | Plex (`argocd/apps/plex`): LoadBalancer TCP 32400, `externalTrafficPolicy: Local`. The UCG forwards WAN TCP 32400 here (direct remote access for friends; not via Envoy) |
 
 `dagaflix.com` is a DNS-only Cloudflare A record kept at the WAN IP by `cloudflare-ddns` (Jellyfin streams direct; Cloudflare's proxy terms don't allow video). The certificate comes from Let's Encrypt via Cloudflare DNS-01, so no port 80 is forwarded.
 
@@ -191,6 +192,14 @@ Deploy order, so Jellyfin scans an already clean, ID-tagged library once:
    - **Monitoring**: Exportarr sidecars (Sonarr/Radarr/Prowlarr/Bazarr) + Unpackerr metrics → Prometheus; Grafana dashboards "Media: pipeline overview" and "Media: Sonarr / Radarr / Prowlarr (Exportarr)"; alert rules in `helm/charts/media-monitoring/files/rules.yaml`. Alertmanager has no receiver yet (Discord TODO), so alerts only show in Grafana/Alertmanager.
    - **Notifications** (Discord server `dagalab`; webhook URLs in Vault `secret/discord` keys `webhook-alerts`, `webhook-media`, `webhook-media-noise`, synced as Secret `discord` to `monitoring` and `media`). Each event goes to one channel. **#alerts**: Alertmanager (all alerts, resolved too; Watchdog/InfoInhibitor dropped) + Sonarr/Radarr "manual import needed". **#media**: Sonarr release imported, Radarr movie imported, Seerr requests (pending, auto-approved, failed) and issues, Jellyfin watch activity (someone started or finished a movie/episode; Webhook plugin, home videos excluded). **#media-noise**: grabs, upgrades, deletions, Bazarr subtitle downloads. App side applied by `scripts/notify-setup.sh [--test]`; *arr health, indexer and Unpackerr failures come only from Alertmanager.
    - Setup order after a rebuild: `vault-bootstrap.sh` → `arr-run.sh arr-wire.py` → `jellyfin-setup.sh` → `seerr-setup.sh` → `bazarr-setup.sh` (all idempotent; Recyclarr/Unpackerr/Decluttarr need nothing).
+
+7. **Plex** (`https://plex.lab.internal`, direct `192.168.3.202:32400`): deployed 2026-10-18 for sharing Movies + TV with friends (they have Plex Pass; this server doesn't, so CPU transcoding only). Library read-only, DB on Longhorn. One-time setup (repeat only after losing the `/config` volume):
+   1. Claim: `kubectl -n media port-forward svc/plex 32400:32400`, open `http://localhost:32400/web`, sign in; Plex sees localhost and offers to claim the server. No claim token in git or Vault.
+   2. Name the server (`dagalab`).
+   3. Libraries: Movies → `/data/movies`, TV Shows → `/data/tv`. Nothing else (`personal/`, `iMovie/`, `youtube/` are never libraries; `theme-parks/` is Jellyfin-only).
+   4. Settings → Library: **off** "Empty trash automatically after every scan" (an NFS blip mid-scan must not drop the library); "Scan my library automatically" on.
+   5. UniFi: port forward WAN TCP 32400 → 192.168.3.202:32400. Plex Settings → Remote Access → "Manually specify public port" 32400 → "Fully accessible outside your network".
+   6. Share Movies + TV with friends (Plex web → Settings → Manage Library Access).
 
 ## TODO
 
