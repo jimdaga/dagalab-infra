@@ -1,7 +1,8 @@
 # Bookshelf: audiobook manager (Readarr fork, Hardcover metadata), the *arr for audiobooks. Root folder
-# /data/audiobooks; qBittorrent category `audiobooks` lands in /data/downloads/audiobooks (same NFS share, so imports
-# hardlink). Audiobooks only: the "Audiobook" quality profile allows just M4B/MP3 (scripts/arr-wire.py owns it;
-# Recyclarr doesn't support Readarr-family apps). LAN only: https://bookshelf.lab.internal. Runs as DSM user media.
+# /audiobooks/library (DSM share `audiobooks`); qBittorrent category `audiobooks` lands in /data/downloads/audiobooks
+# on the media share, so imports copy (hardlinks can't cross shares; audiobooks are small). Audiobooks only: the
+# "Audiobook" quality profile allows just M4B/MP3 (scripts/arr-wire.py owns it; Recyclarr doesn't support
+# Readarr-family apps). LAN only: https://bookshelf.lab.internal. Runs as DSM user media.
 controllers:
   bookshelf:
     strategy: Recreate
@@ -55,9 +56,15 @@ persistence:
     size: 5Gi
     globalMounts:
       - path: /config
-  # Shared media share: library + downloads (helm/charts/media-storage)
+  # Shared media share: downloads (helm/charts/media-storage)
   data:
     type: persistentVolumeClaim
     existingClaim: media-data
     globalMounts:
       - path: /data
+  # DSM share `audiobooks`: library/ is the root folder
+  audiobooks:
+    type: persistentVolumeClaim
+    existingClaim: audiobooks
+    globalMounts:
+      - path: /audiobooks

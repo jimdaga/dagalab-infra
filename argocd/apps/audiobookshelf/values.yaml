@@ -1,8 +1,8 @@
 # Audiobookshelf: audiobook + podcast server with phone apps and per-user progress. Public https://books.dagaflix.com
 # (shared-gateway), LAN https://books.lab.internal. Its own accounts (no Jellyfin sign-in): root `jim` + one per
-# person, long random passwords. Libraries: Audiobooks = /data/audiobooks (Bookshelf) + /data/audible (Libation), the
-# media share mounted READ-ONLY; Podcasts = /podcasts, the DSM share `podcasts` (the only place it writes). subPath
-# would have limited it to the audio folders, but kubelet can't prepare subPaths on the root-squashed share.
+# person, long random passwords. Only the audio DSM shares are mounted (never the video share): Audiobooks =
+# /audiobooks/library (Bookshelf) + /audiobooks/audible (Libation), READ-ONLY; Podcasts = /podcasts (the only place it
+# writes). Shares: helm/charts/media-storage.
 # First run + libraries + Homepage key: scripts/audiobookshelf-setup.sh (must run before the public route exists).
 controllers:
   audiobookshelf:
@@ -62,13 +62,13 @@ persistence:
     size: 10Gi
     globalMounts:
       - path: /metadata
-  # the media share, read-only: books arrive via Bookshelf (audiobooks/) and Libation (audible/)
-  media:
+  # DSM share `audiobooks`, read-only: books arrive via Bookshelf (library/) and Libation (audible/)
+  audiobooks:
     type: persistentVolumeClaim
-    existingClaim: media-data
+    existingClaim: audiobooks
     globalMounts:
-      - { path: /data, readOnly: true }
-  # podcast episodes: DSM share `podcasts` (helm/charts/media-storage)
+      - { path: /audiobooks, readOnly: true }
+  # podcast episodes: DSM share `podcasts`
   podcasts:
     type: persistentVolumeClaim
     existingClaim: podcasts

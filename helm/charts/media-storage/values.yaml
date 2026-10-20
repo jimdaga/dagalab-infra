@@ -23,9 +23,18 @@ trickplay:
   claimName: jellyfin-trickplay
   size: 200Gi                   # nominal
 
-# Audiobookshelf's podcast episodes: a dedicated DSM share (like trickplay). Audiobookshelf is internet-facing, so it
-# gets the media share read-only and writes only here. subPath on the media share can't work: root is squashed to
-# guest and DSM denies guest, so kubelet can't prepare subdirectories (and the NAS refuses subdirectory mounts).
+# Audio: two dedicated DSM shares, so the internet-facing Audiobookshelf never mounts the video share. (subPath on
+# media-data can't work: root is squashed to guest and DSM denies guest, so kubelet can't prepare subdirectories,
+# and the NAS refuses subdirectory mounts.)
+# audiobooks: library/ = Bookshelf's root folder, audible/ = Libation's Audible backups. Audiobookshelf reads it.
+# Bookshelf's downloads stay in media-data downloads/audiobooks, so its imports copy (no hardlinks across shares).
+audiobooks:
+  path: /volume2/audiobooks     # NFS rule: 192.168.3.11-13 only, RW, root squashed to guest; writable by DSM user media (1029:100)
+  volumeName: audiobooks
+  claimName: audiobooks
+  size: 1Ti                     # nominal
+
+# podcasts: episodes downloaded by Audiobookshelf (the only place it writes)
 podcasts:
   path: /volume2/podcasts       # NFS rule: 192.168.3.11-13 only, RW, root squashed to guest; writable by DSM user media (1029:100)
   volumeName: podcasts

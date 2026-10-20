@@ -148,7 +148,7 @@ for name, a in APPS.items():
 # Bookshelf (Readarr fork, audiobooks only): /api/v1 and Readarr field names, so it gets its own section.
 # Audiobooks-only comes from the quality profile: only MP3/M4B allowed, M4B preferred. Recyclarr doesn't support
 # Readarr-family apps, so this script owns that profile (unlike Sonarr/Radarr's).
-BOOKSHELF = dict(url='http://127.0.0.1:18787/api/v1', key=os.environ['BOOKSHELF_KEY'], root='/data/audiobooks', cat='audiobooks', port=8787)
+BOOKSHELF = dict(url='http://127.0.0.1:18787/api/v1', key=os.environ['BOOKSHELF_KEY'], root='/audiobooks/library', cat='audiobooks', port=8787)
 AUDIO = [10, 12]   # MP3, M4B: profile items are ordered lowest -> highest preference
 b, bk = BOOKSHELF['url'], BOOKSHELF['key']
 st, status = call(b, bk, 'GET', '/system/status')
