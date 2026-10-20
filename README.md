@@ -218,6 +218,7 @@ Deploy order, so Jellyfin scans an already clean, ID-tagged library once:
 - [ ] UniFi DNS: `homarr.lab.internal` → 192.168.3.201
 - [x] UniFi DNS: `home.lab.internal` → 192.168.3.201
 - [ ] Home Assistant: review Settings → Devices & services → Discovered (main-LAN devices) and add the ones wanted
+- [ ] Audiobooks follow-ups (after Audiobookshelf/Bookshelf/Libation are running; spec `docs/superpowers/specs/2026-10-20-audiobooks-design.md`): Bookshelf Discord notifications (`scripts/notify-setup.py`); Decluttarr + Unpackerr for Bookshelf; Exportarr `readarr` sidecar, Grafana panels and alert rules for Bookshelf, plus an alert on a failed Libation Job
 - [ ] Exportarr: when v3 is released, bump the sidecars and restore per-state queue panels/alerts (import stuck, stalled) in `helm/charts/media-monitoring`; v2.3.0 mislabels `*_queue_total` (one series, last item's state, value = total)
 - [ ] Optional: replace Forgetting Sarah Marshall's 2-part CD1/CD2 rip (Radarr can't track multi-part files); Amazon What They Know About Us has no TMDB/TVDB entry and stays unmanaged
 - [ ] Jellyfin Enhanced: paste a TMDB API key and an MDBList key in Dashboard → Plugins → Jellyfin Enhanced (ratings, "Elsewhere", genre discovery), then enable MDBList ratings
