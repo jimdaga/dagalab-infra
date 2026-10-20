@@ -1,0 +1,71 @@
+# Audiobookshelf: audiobook + podcast server with phone apps and per-user progress. Public https://books.dagaflix.com
+# (shared-gateway), LAN https://books.lab.internal. Its own accounts (no Jellyfin sign-in): root `jim` + one per
+# person, long random passwords. Libraries: Audiobooks = /audiobooks (Bookshelf) + /audible (Libation), both
+# READ-ONLY here; Podcasts = /podcasts (written by Audiobookshelf). Only those folders of media-data are mounted.
+# First run + libraries + Homepage key: scripts/audiobookshelf-setup.sh (must run before the public route exists).
+controllers:
+  audiobookshelf:
+    strategy: Recreate   # never two instances on one SQLite DB
+    pod:
+      securityContext:   # DSM user media; non-root, hence PORT 13378 (can't bind 80)
+        runAsUser: 1029
+        runAsGroup: 100
+        fsGroup: 100
+        fsGroupChangePolicy: OnRootMismatch
+    containers:
+      app:
+        image:
+          repository: ghcr.io/advplyr/audiobookshelf
+          tag: 2.37.1
+        env:
+          TZ: America/New_York
+          PORT: "13378"
+        probes:
+          liveness: &probe
+            enabled: true
+            custom: true
+            spec:
+              httpGet:
+                path: /healthcheck
+                port: 13378
+              periodSeconds: 30
+              failureThreshold: 5
+          readiness: *probe
+        resources:
+          requests:
+            cpu: 100m
+            memory: 256Mi
+          limits:
+            memory: 1Gi
+
+service:
+  app:
+    controller: audiobookshelf
+    ports:
+      http:
+        port: 80
+        targetPort: 13378
+
+persistence:
+  # SQLite DB: Longhorn, never NFS
+  config:
+    type: persistentVolumeClaim
+    accessMode: ReadWriteOnce
+    size: 2Gi
+    globalMounts:
+      - path: /config
+  # covers, cache, backups
+  metadata:
+    type: persistentVolumeClaim
+    accessMode: ReadWriteOnce
+    size: 10Gi
+    globalMounts:
+      - path: /metadata
+  # only the audio folders of the media share (helm/charts/media-storage); books arrive via Bookshelf/Libation
+  media:
+    type: persistentVolumeClaim
+    existingClaim: media-data
+    globalMounts:
+      - { path: /audiobooks, subPath: audiobooks, readOnly: true }
+      - { path: /audible,    subPath: audible,    readOnly: true }
+      - { path: /podcasts,   subPath: podcasts }

@@ -24,6 +24,7 @@ routes:
   - { host: jellyfin, namespace: media,           service: jellyfin,                      port: 8096, http: true }
   - { host: plex,     namespace: media,           service: plex,                          port: 32400 }
   - { host: seerr,    namespace: media,           service: seerr,                         port: 5055 }
+  - { host: books,    namespace: media,           service: audiobookshelf,                port: 80 }
   - { host: torrent,  namespace: media,           service: qbittorrent,                   port: 8080 }
   - { host: sonarr,   namespace: media,           service: sonarr,                        port: 8989 }
   - { host: radarr,   namespace: media,           service: radarr,                        port: 7878 }
