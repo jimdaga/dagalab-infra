@@ -1,4 +1,4 @@
-# PUBLIC gateway: the UCG forwards WAN 443 here. Only routes listed below are internet-facing;
+# PUBLIC gateway: the UCG forwards WAN 443 here. Only routes listed below are internet-facing (Jellyfin, Seerr);
 # platform UIs stay on lan-gateway (*.lab.internal), never here.
 domain: dagaflix.com
 
@@ -17,8 +17,10 @@ certificate:
 # optionally only under pathPrefix. `name` defaults to host; must not collide with lan-gateway's <host>-lan.
 # Jellyfin lives on an unadvertised subdomain (wildcard DNS + wildcard cert, so the name is in neither
 # Cloudflare's per-host records nor CT logs). Not a sub-path: some TV apps (Trovu) ignore a server path.
+# Seerr (requests) signs in with the same Jellyfin accounts; its local-account login is off (scripts/seerr-setup.py).
 routes:
-  - { name: jellyfin, host: popcorn, namespace: media, service: jellyfin, port: 8096 }
+  - { name: jellyfin, host: popcorn,  namespace: media, service: jellyfin, port: 8096 }
+  - { name: seerr,    host: requests, namespace: media, service: seerr,    port: 5055 }
 
 # Every other hostname (bare domain, any made-up subdomain, the raw IP) gets this page straight from
 # Envoy, so scanners see nothing that identifies the server. The body is an Envoy format string: never

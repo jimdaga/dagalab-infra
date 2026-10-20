@@ -41,10 +41,12 @@ if st not in (200, 204):
     sys.exit(f'jellyfin sign-in failed: {st} {r}')
 log(f'signed in as {login["username"]} (Jellyfin)')
 
-# 2) Jellyfin settings: external URL for "watch in Jellyfin" links (writable fields only)
+# 2) Jellyfin settings: external URL for "watch in Jellyfin" links (writable fields only). The public name, since
+#    Seerr itself is public (requests.dagaflix.com); it also works on the LAN (the UCG hairpins the WAN IP).
+JF_PUBLIC = 'https://popcorn.dagaflix.com'
 st, jf = call('GET', '/settings/jellyfin')
 body = dict(ip=f'jellyfin.{SVC}', port=8096, useSsl=False, urlBase='',
-            externalHostname='https://jellyfin.lab.internal', jellyfinForgotPasswordUrl=jf.get('jellyfinForgotPasswordUrl', ''),
+            externalHostname=JF_PUBLIC, jellyfinForgotPasswordUrl=jf.get('jellyfinForgotPasswordUrl', ''),
             apiKey=os.environ['JF_KEY'])
 if any(jf.get(k) != v for k, v in body.items()):
     st, r = call('POST', '/settings/jellyfin', body)
@@ -102,15 +104,18 @@ MAIN_RW = ('appLanguage', 'applicationTitle', 'applicationUrl', 'hideAvailable',
 # New users (anyone signing in with a Jellyfin account) get REQUEST only: their requests wait for approval.
 # Only the admin (jim) auto-approves. Never grant AUTO_APPROVE* or MANAGE_REQUESTS by default.
 DEFAULT_PERMISSIONS = 32   # Permission.REQUEST
+# Public at APP_URL (shared-gateway route; seerr.lab.internal still works on the LAN). Links in notifications use it.
+# Everyone signs in with Jellyfin, so Seerr's own local-account login is off: no password form to guess at.
+APP_URL = 'https://requests.dagaflix.com'
 st, main = call('GET', '/settings/main')
-if (main.get('applicationUrl') != 'https://seerr.lab.internal' or main.get('applicationTitle') != 'dagalab'
-        or main.get('defaultPermissions') != DEFAULT_PERMISSIONS):
+if (main.get('applicationUrl') != APP_URL or main.get('applicationTitle') != 'dagalab'
+        or main.get('defaultPermissions') != DEFAULT_PERMISSIONS or main.get('localLogin') is not False):
     body = {k: main[k] for k in MAIN_RW if k in main}
-    body.update(applicationUrl='https://seerr.lab.internal', applicationTitle='dagalab',
-                defaultPermissions=DEFAULT_PERMISSIONS)
+    body.update(applicationUrl=APP_URL, applicationTitle='dagalab', defaultPermissions=DEFAULT_PERMISSIONS,
+                localLogin=False)
     st, r = call('POST', '/settings/main', body)
     log(f'main settings: {st} {r if st >= 300 else ""}')
-# Seerr sits behind the LAN gateway (Envoy sets X-Forwarded-For): trust it so Seerr sees real client IPs.
+# Seerr sits behind Envoy (LAN and public gateways set X-Forwarded-For): trust it so Seerr sees real client IPs.
 # Takes effect after a restart (kubectl -n media rollout restart deploy/seerr).
 st, net = call('GET', '/settings/network')
 if not net.get('trustProxy'):

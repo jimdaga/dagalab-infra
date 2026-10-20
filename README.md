@@ -36,7 +36,7 @@ Lab VLAN 3 on the UniFi Cloud Gateway Ultra: `192.168.3.0/24`.
 | 192.168.3.100 | bastion.lab.internal: Raspberry Pi, Ubuntu (static, `scripts/host-config.sh`; tooling in `bastion/`) |
 | 192.168.3.101–199 | UniFi DHCP pool. UniFi defaults a new network to .6–.254, so shrink it to this range: fixed-IP reservations protect the four hosts, but the API VIP (.10) and the MetalLB pool have no MAC to reserve against. |
 | 192.168.3.200–229 | MetalLB pool. **Must be outside the DHCP pool.** |
-| 192.168.3.200 | Public shared gateway (`helm/charts/shared-gateway`): the UCG forwards WAN TCP 443 here. Only Jellyfin at `popcorn.dagaflix.com`; every other hostname (bare domain, made-up subdomains, raw IP) gets a blank placeholder page, `www` redirects to the bare domain. Platform UIs never go on it |
+| 192.168.3.200 | Public shared gateway (`helm/charts/shared-gateway`): the UCG forwards WAN TCP 443 here. Only Jellyfin at `popcorn.dagaflix.com` and Seerr at `requests.dagaflix.com`; every other hostname (bare domain, made-up subdomains, raw IP) gets a blank placeholder page, `www` redirects to the bare domain. Platform UIs never go on it |
 | 192.168.3.201 | LAN gateway: `https://<app>.lab.internal` (`helm/charts/lan-gateway`) |
 | 192.168.3.202 | Plex (`argocd/apps/plex`): LoadBalancer TCP 32400, `externalTrafficPolicy: Local`. The UCG forwards WAN TCP 32400 here (direct remote access for friends; not via Envoy) |
 
@@ -86,7 +86,7 @@ Two zones, two owners:
 | -1 | media-storage | Static NFS PV/PVC `media/media-data` → daga-nas `192.168.3.21`, shared by all media apps; plus `jellyfin-trickplay` (`/volume2/trickplay`) |
 | 0 | prowlarr | Indexer manager; API key from Vault (`secret/prowlarr`), synced to Radarr/Sonarr |
 | 0 | jellyfin | Media server: library read-only from `media-data`, Quick Sync via the GPU plugin; `https://` and plain `http://jellyfin.lab.internal` |
-| 0 | seerr | Request UI (Jellyfin sign-in) → Radarr/Sonarr; `https://seerr.lab.internal` |
+| 0 | seerr | Request UI (Jellyfin sign-in) → Radarr/Sonarr; public `https://requests.dagaflix.com`, LAN `https://seerr.lab.internal` |
 | 0 | radarr | Movies → `/data/movies`; config on Longhorn, API key from Vault |
 | 0 | sonarr | TV → `/data/tv`; config on Longhorn, API key from Vault |
 | 0 | qbittorrent | qBittorrent behind a Gluetun sidecar (PIA OpenVPN, port forwarding); downloads under `/data` on `media-data` |
@@ -94,7 +94,7 @@ Two zones, two owners:
 | 0 | homepage | LAN dashboard (gethomepage.dev), *arr widgets via Vault API keys |
 | 0 | homarr | Trial alternative dashboard (homarr.dev), compared against Homepage; config lives in its DB |
 | 5 | lan-gateway | LAN-only Envoy Gateway on 192.168.3.201: HTTPS `*.lab.internal` routes to the admin/media UIs; owns the cluster GatewayClass |
-| 5 | shared-gateway | Public Gateway (WAN 443), `dagaflix.com` wildcard cert, Jellyfin route |
+| 5 | shared-gateway | Public Gateway (WAN 443), `dagaflix.com` wildcard cert, Jellyfin + Seerr routes |
 
 metrics-server is bundled by RKE2, so it isn't listed here. RKE2's bundled ingress-nginx is disabled.
 
@@ -183,7 +183,7 @@ Deploy order, so Jellyfin scans an already clean, ID-tagged library once:
    - Libraries: Movies (`/data/movies`), Shows (`/data/tv`), Home Videos (`/data/theme-parks`).
    - **Public**: `https://popcorn.dagaflix.com` through the shared gateway (192.168.3.200, UCG port forward WAN 443). The subdomain is unadvertised: DNS is a wildcard (`*.dagaflix.com`, kept current by `cloudflare-ddns`) and the cert is a wildcard, so the name shows up in neither DNS enumeration nor CT logs, and `dagaflix.com`, any other name and the raw IP serve a blank page that doesn't identify the server. (It was a `/4orr` BaseUrl first; some TV apps, e.g. Trovu, ignore a server path, so Jellyfin serves from `/` again.) In-cluster consumers (Homepage, Homarr, Seerr, Sonarr/Radarr via `arr-wire.py`) use `http://jellyfin.media.svc.cluster.local:8096`. Same accounts as on the LAN; set Jellyfin's Networking → Known proxies to the pod network so it sees real client IPs.
 
-5. **Seerr** (`https://seerr.lab.internal`): deployed. `scripts/seerr-setup.sh` signs in with the Jellyfin admin (Seerr admin = Jellyfin `jim`), enables Movies + Shows, adds Radarr/Sonarr (Recyclarr profiles: `HD Bluray + WEB` / `WEB-1080p`) and stores Seerr's API key in Vault `secret/seerr`. Household members sign in with their Jellyfin accounts; approved requests are monitored + searched by Radarr/Sonarr.
+5. **Seerr** (public `https://requests.dagaflix.com` via the shared gateway, LAN `https://seerr.lab.internal`): deployed. `scripts/seerr-setup.sh` signs in with the Jellyfin admin (Seerr admin = Jellyfin `jim`), enables Movies + Shows, adds Radarr/Sonarr (Recyclarr profiles: `HD Bluray + WEB` / `WEB-1080p`) and stores Seerr's API key in Vault `secret/seerr`. It also sets the application URL to the public name, points "watch in Jellyfin" links at `popcorn.dagaflix.com` and turns Seerr's local-account login off (public site: Jellyfin accounts only). Household members sign in with their Jellyfin accounts; approved requests are monitored + searched by Radarr/Sonarr.
 6. **Supporting apps** (all in `media`, all deployed 2026-10-12):
    - **Recyclarr** (daily CronJob, config in `argocd/apps/recyclarr/values.yaml`): TRaSH Guides profiles + custom formats. Sonarr `WEB-1080p` (WEB preferred, Blu-ray 1080p allowed), Radarr `HD Bluray + WEB`; Golden Rule HD + Unwanted Formats (AV1, x265 at HD, LQ, upscaled, BR-DISK: all -10000). Every series/movie uses these profiles; the old built-in ones are unused. Run now: `kubectl -n media create job --from=cronjob/recyclarr recyclarr-manual`.
    - **Unpackerr**: extracts RAR'd releases (common on TorrentLeech) so Sonarr/Radarr can import; archives keep seeding, extracted copies are deleted after import.
