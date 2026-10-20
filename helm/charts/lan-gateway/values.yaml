@@ -27,6 +27,7 @@ routes:
   - { host: torrent,  namespace: media,           service: qbittorrent,                   port: 8080 }
   - { host: sonarr,   namespace: media,           service: sonarr,                        port: 8989 }
   - { host: radarr,   namespace: media,           service: radarr,                        port: 7878 }
+  - { host: bookshelf, namespace: media,          service: bookshelf,                     port: 8787 }
   - { host: prowlarr, namespace: media,           service: prowlarr,                      port: 9696 }
   - { host: bazarr,   namespace: media,           service: bazarr,                        port: 6767 }
   - { host: argocd,   namespace: argocd,          service: argocd-server,                 port: 80 }

@@ -64,6 +64,12 @@ externalSecrets:
       - secretKey: SONARR__AUTH__APIKEY   # Servarr env override for config.xml <ApiKey>
         key: sonarr
         property: api-key
+  - name: bookshelf
+    namespace: media
+    data:
+      - secretKey: READARR__AUTH__APIKEY   # Servarr env override for config.xml <ApiKey> (Bookshelf keeps Readarr's prefix)
+        key: bookshelf
+        property: api-key
   - name: homepage
     namespace: homepage
     data:

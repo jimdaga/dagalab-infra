@@ -1,0 +1,63 @@
+# Bookshelf: audiobook manager (Readarr fork, Hardcover metadata), the *arr for audiobooks. Root folder
+# /data/audiobooks; qBittorrent category `audiobooks` lands in /data/downloads/audiobooks (same NFS share, so imports
+# hardlink). Audiobooks only: the "Audiobook" quality profile allows just M4B/MP3 (scripts/arr-wire.py owns it;
+# Recyclarr doesn't support Readarr-family apps). LAN only: https://bookshelf.lab.internal. Runs as DSM user media.
+controllers:
+  bookshelf:
+    strategy: Recreate
+    containers:
+      app:
+        image:
+          repository: ghcr.io/pennydreadful/bookshelf
+          tag: hardcover-v0.4.21.182
+        env:
+          TZ: America/New_York
+          PUID: "1029"
+          PGID: "100"
+          # Same as Sonarr: LAN is trusted, auth handled outside the app (gateway-proxied requests are never "local").
+          # MUST switch to Forms before this is ever routed on the public shared-gateway.
+          READARR__AUTH__METHOD: External
+          READARR__LOG__LEVEL: info
+          READARR__LOG__ANALYTICSENABLED: "False"
+        envFrom:
+          - secretRef:
+              name: bookshelf   # READARR__AUTH__APIKEY (Vault secret/bookshelf)
+        probes:
+          liveness: &probe
+            enabled: true
+            custom: true
+            spec:
+              httpGet:
+                path: /ping
+                port: 8787
+              periodSeconds: 30
+              failureThreshold: 5
+          readiness: *probe
+        resources:
+          requests:
+            cpu: 50m
+            memory: 256Mi
+          limits:
+            memory: 1Gi
+
+service:
+  app:
+    controller: bookshelf
+    ports:
+      http:
+        port: 8787
+
+persistence:
+  # SQLite config DB: Longhorn, never NFS
+  config:
+    type: persistentVolumeClaim
+    accessMode: ReadWriteOnce
+    size: 5Gi
+    globalMounts:
+      - path: /config
+  # Shared media share: library + downloads (helm/charts/media-storage)
+  data:
+    type: persistentVolumeClaim
+    existingClaim: media-data
+    globalMounts:
+      - path: /data
