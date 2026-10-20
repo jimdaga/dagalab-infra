@@ -91,6 +91,12 @@ externalSecrets:
       - secretKey: HOMEPAGE_VAR_SEERR_KEY   # Seerr API key (scripts/seerr-setup.sh)
         key: seerr
         property: api-key
+      - secretKey: HOMEPAGE_VAR_AUDIOBOOKSHELF_KEY   # read-only `homepage` user's API key (scripts/audiobookshelf-setup.sh)
+        key: audiobookshelf
+        property: homepage-key
+      - secretKey: HOMEPAGE_VAR_BOOKSHELF_KEY   # read-only use by Homepage widgets
+        key: bookshelf
+        property: api-key
       - secretKey: HOMEPAGE_VAR_GLUETUN_KEY   # Gluetun control server (VPN status widget)
         key: gluetun
         property: api-key

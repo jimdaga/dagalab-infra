@@ -166,6 +166,17 @@ configMaps:
                 namespace: media
                 app: plex
                 siteMonitor: http://plex.media.svc.cluster.local:32400/identity
+            - Audiobookshelf:
+                href: https://books.lab.internal
+                icon: audiobookshelf.png
+                description: Audiobooks + podcasts
+                namespace: media
+                app: audiobookshelf
+                siteMonitor: http://audiobookshelf.media.svc.cluster.local/healthcheck
+                widget:
+                  type: audiobookshelf
+                  url: http://audiobookshelf.media.svc.cluster.local
+                  key: "{{ "{{HOMEPAGE_VAR_AUDIOBOOKSHELF_KEY}}" }}"
             - Seerr:
                 href: https://seerr.lab.internal
                 icon: jellyseerr.png
@@ -200,6 +211,17 @@ configMaps:
                   type: radarr
                   url: http://radarr.media.svc.cluster.local:7878
                   key: "{{ "{{HOMEPAGE_VAR_RADARR_KEY}}" }}"
+            - Bookshelf:
+                href: https://bookshelf.lab.internal
+                icon: readarr.png
+                description: Audiobooks
+                namespace: media
+                app: bookshelf
+                siteMonitor: http://bookshelf.media.svc.cluster.local:8787/ping
+                widget:
+                  type: readarr
+                  url: http://bookshelf.media.svc.cluster.local:8787
+                  key: "{{ "{{HOMEPAGE_VAR_BOOKSHELF_KEY}}" }}"
             - Bazarr:
                 href: https://bazarr.lab.internal
                 icon: bazarr.png
