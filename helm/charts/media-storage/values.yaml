@@ -22,3 +22,12 @@ trickplay:
   volumeName: jellyfin-trickplay
   claimName: jellyfin-trickplay
   size: 200Gi                   # nominal
+
+# Audiobookshelf's podcast episodes: a dedicated DSM share (like trickplay). Audiobookshelf is internet-facing, so it
+# gets the media share read-only and writes only here. subPath on the media share can't work: root is squashed to
+# guest and DSM denies guest, so kubelet can't prepare subdirectories (and the NAS refuses subdirectory mounts).
+podcasts:
+  path: /volume2/podcasts       # NFS rule: 192.168.3.11-13 only, RW, root squashed to guest; writable by DSM user media (1029:100)
+  volumeName: podcasts
+  claimName: podcasts
+  size: 500Gi                   # nominal

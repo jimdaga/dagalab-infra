@@ -1,0 +1,35 @@
+{{- with .Values.podcasts }}
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: {{ .volumeName }}
+spec:
+  capacity:
+    storage: {{ .size }}
+  accessModes:
+    - ReadWriteMany
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: ""
+  mountOptions:
+    {{- toYaml $.Values.nfs.mountOptions | nindent 4 }}
+  nfs:
+    server: {{ $.Values.nfs.server }}
+    path: {{ .path }}
+  claimRef:
+    namespace: {{ $.Release.Namespace }}
+    name: {{ .claimName }}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ .claimName }}
+  namespace: {{ $.Release.Namespace }}
+spec:
+  accessModes:
+    - ReadWriteMany
+  storageClassName: ""
+  volumeName: {{ .volumeName }}
+  resources:
+    requests:
+      storage: {{ .size }}
+{{- end }}
