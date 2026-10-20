@@ -40,8 +40,8 @@ automation:
                   interruption-level: time-sensitive
       - delay: 15   # one alert per visitor, not per press
 
-  # Person at the door (no ring): chime + phone notification, no light flash. Fires for anyone the doorbell
-  # camera sees, family included; a 2-minute cooldown keeps one visit to one alert.
+  # Person at the door (no ring): phone notification only. No Sonos chime (fired for family coming and going
+  # too, so it was switched off) and no light flash. A 2-minute cooldown keeps one visit to one alert.
   - id: dagalab_front_door_person
     alias: Front door person
     mode: single
@@ -54,22 +54,12 @@ automation:
     conditions:
       - "{{ trigger.to_state.attributes.event_type == 'camera_person' }}"
     actions:
-      - parallel:
-          - action: media_player.play_media
-            target:
-              entity_id: [media_player.living_room_living_room, media_player.sunroom_sunroom]
-            data:
-              media_content_id: http://home.lab.internal/local/doorbell.wav
-              media_content_type: music
-              announce: true
-              extra:
-                volume: 40
-          - action: notify.mobile_app_jim_d_agostinos_iphone
-            data:
-              title: Front door
-              message: Someone's at the front door
-              data:
-                url: "entityId:camera.front_door_front_door"   # live view; no stills (see Doorbell above)
-                push:
-                  interruption-level: time-sensitive
+      - action: notify.mobile_app_jim_d_agostinos_iphone
+        data:
+          title: Front door
+          message: Someone's at the front door
+          data:
+            url: "entityId:camera.front_door_front_door"   # live view; no stills (see Doorbell above)
+            push:
+              interruption-level: time-sensitive
       - delay: 120
