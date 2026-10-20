@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
-"""Idempotently wire Radarr/Sonarr/Prowlarr over their APIs (via local port-forwards).
-Env: RADARR_KEY, SONARR_KEY, PROWLARR_KEY, JELLYFIN_KEY (Jellyfin API key "arr"). Ports: radarr 17878, sonarr 18989, prowlarr 19696, qbittorrent 18080 on localhost."""
+"""Idempotently wire Radarr/Sonarr/Bookshelf/Prowlarr over their APIs (via local port-forwards).
+Env: RADARR_KEY, SONARR_KEY, PROWLARR_KEY, BOOKSHELF_KEY, JELLYFIN_KEY (Jellyfin API key "arr"). Ports: radarr 17878, sonarr 18989, prowlarr 19696,
+bookshelf 18787, qbittorrent 18080 on localhost."""
 import json, os, sys, urllib.parse, urllib.request, urllib.error
 
 SVC = 'media.svc.cluster.local'
@@ -144,7 +145,78 @@ for name, a in APPS.items():
 
     # Quality profiles and custom formats (incl. no-AV1) are owned by Recyclarr (argocd/apps/recyclarr), not this script.
 
-# Prowlarr -> Radarr/Sonarr applications (full sync of indexers)
+# Bookshelf (Readarr fork, audiobooks only): /api/v1 and Readarr field names, so it gets its own section.
+# Audiobooks-only comes from the quality profile: only MP3/M4B allowed, M4B preferred. Recyclarr doesn't support
+# Readarr-family apps, so this script owns that profile (unlike Sonarr/Radarr's).
+BOOKSHELF = dict(url='http://127.0.0.1:18787/api/v1', key=os.environ['BOOKSHELF_KEY'], root='/data/audiobooks', cat='audiobooks', port=8787)
+AUDIO = [10, 12]   # MP3, M4B: profile items are ordered lowest -> highest preference
+b, bk = BOOKSHELF['url'], BOOKSHELF['key']
+st, status = call(b, bk, 'GET', '/system/status')
+print(f'== bookshelf {status.get("version") if st == 200 else st}')
+
+st, profs = call(b, bk, 'GET', '/qualityprofile')
+prof = next((x for x in profs if x['name'] == 'Audiobook'), None)
+flat = lambda items: [c for i in items for c in (i.get('items') or [i])]
+if prof and [c['quality']['id'] for c in flat(prof['items']) if c['allowed']] == AUDIO and prof['cutoff'] == 12:
+    print('   quality profile Audiobook: present')
+else:
+    st, schema = call(b, bk, 'GET', '/qualityprofile/schema')
+    items = flat(schema['items'])
+    for c in items:
+        c['allowed'] = c['quality']['id'] in AUDIO
+    items = [c for c in items if c['quality']['id'] not in AUDIO] + [next(c for c in items if c['quality']['id'] == q) for q in AUDIO]
+    body = dict(schema, name='Audiobook', upgradeAllowed=True, cutoff=12, items=items)
+    if prof:
+        body['id'] = prof['id']
+    st, r = call(b, bk, 'PUT' if prof else 'POST', f'/qualityprofile/{prof["id"]}' if prof else '/qualityprofile', body)
+    print(f'   quality profile Audiobook: {"updated" if prof else "created"} (HTTP {st})' if st in (200, 201, 202) else f'   quality profile FAILED {st}: {r}')
+    ok &= st in (200, 201, 202)
+    st, profs = call(b, bk, 'GET', '/qualityprofile')
+    prof = next(x for x in profs if x['name'] == 'Audiobook')
+
+# root folder: monitor nothing by default, so requesting one book never grabs the author's whole catalogue
+st, roots = call(b, bk, 'GET', '/rootfolder')
+if any(r['path'].rstrip('/') == BOOKSHELF['root'] for r in roots):
+    print(f'   root folder {BOOKSHELF["root"]}: present')
+else:
+    st, mprofs = call(b, bk, 'GET', '/metadataprofile')
+    body = dict(name='Audiobooks', path=BOOKSHELF['root'], defaultQualityProfileId=prof['id'],
+                defaultMetadataProfileId=mprofs[0]['id'], defaultMonitorOption='none', defaultNewItemMonitorOption='none',
+                defaultTags=[], isCalibreLibrary=False)
+    st, r = call(b, bk, 'POST', '/rootfolder', body)
+    print(f'   root folder {BOOKSHELF["root"]}: created (HTTP {st})' if st in (200, 201) else f'   root folder FAILED {st}: {r}'); ok &= st in (200, 201)
+
+for cfg, want in (('/config/naming', dict(renameBooks=True, replaceIllegalCharacters=True)),
+                  ('/config/mediamanagement', dict(copyUsingHardlinks=True, deleteEmptyFolders=True))):
+    st, cur = call(b, bk, 'GET', cfg)
+    missing = [f for f in want if f not in cur]
+    assert not missing, f'{cfg}: no field(s) {missing}'
+    if any(cur.get(f) != v for f, v in want.items()):
+        cur.update(want)
+        st, r = call(b, bk, 'PUT', f'{cfg}/{cur["id"]}', cur)
+        print(f'   {cfg}: updated (HTTP {st})' if st in (200, 202) else f'   {cfg} FAILED {st}: {r}'); ok &= st in (200, 202)
+    else:
+        print(f'   {cfg}: already set')
+
+st, dcs = call(b, bk, 'GET', '/downloadclient')
+if any(d['implementation'] == 'QBittorrent' for d in dcs):
+    print('   download client qBittorrent: present')
+else:
+    st, schema = call(b, bk, 'GET', '/downloadclient/schema')
+    dc = next(s for s in schema if s['implementation'] == 'QBittorrent')
+    dc.update(name='qBittorrent', enable=True, priority=1)
+    setf(dc['fields'], 'host', f'qbittorrent.{SVC}')
+    setf(dc['fields'], 'port', 8080)
+    setf(dc['fields'], 'useSsl', False)
+    setf(dc['fields'], 'musicCategory', BOOKSHELF['cat'])   # Readarr's name for the category field
+    st, r = call(b, bk, 'POST', '/downloadclient/test', dc)
+    if st not in (200, 202):
+        print(f'   download client test FAILED {st}: {r}'); ok = False
+    else:
+        st, r = call(b, bk, 'POST', '/downloadclient', dc)
+        print(f'   download client qBittorrent ({BOOKSHELF["cat"]}): created (HTTP {st})' if st in (200, 201) else f'   create FAILED {st}: {r}'); ok &= st in (200, 201)
+
+# Prowlarr -> Radarr/Sonarr/Bookshelf applications (full sync of indexers)
 p = PROWLARR
 st, status = call(p['url'], p['key'], 'GET', '/system/status')
 print(f'== prowlarr {status.get("version") if st == 200 else st}')
@@ -164,6 +236,22 @@ for name, a in APPS.items():
         print(f'   application {impl} test FAILED {st}: {r}'); ok = False; continue
     st, r = call(p['url'], p['key'], 'POST', '/applications', app)
     print(f'   application {impl}: test OK, created (HTTP {st})' if st in (200, 201) else f'   create FAILED {st}: {r}'); ok &= st in (200, 201)
+# Bookshelf registers as a Readarr app; audiobook (3030) + general audio (3000: TorrentLeech has no audiobook category)
+if any(e['implementation'] == 'Readarr' for e in existing):
+    print('   application Bookshelf (Readarr): present')
+else:
+    app = next(s for s in schema if s['implementation'] == 'Readarr')
+    app.update(name='Bookshelf', syncLevel='fullSync')
+    setf(app['fields'], 'prowlarrUrl', f'http://prowlarr.{SVC}:9696')
+    setf(app['fields'], 'baseUrl', f'http://bookshelf.{SVC}:{BOOKSHELF["port"]}')
+    setf(app['fields'], 'apiKey', BOOKSHELF['key'])
+    setf(app['fields'], 'syncCategories', [3030, 3000])
+    st, r = call(p['url'], p['key'], 'POST', '/applications/test', app)
+    if st not in (200, 202):
+        print(f'   application Bookshelf test FAILED {st}: {r}'); ok = False
+    else:
+        st, r = call(p['url'], p['key'], 'POST', '/applications', app)
+        print(f'   application Bookshelf: created (HTTP {st})' if st in (200, 201) else f'   create FAILED {st}: {r}'); ok &= st in (200, 201)
 
 # Prowlarr indexer seed goals + priority (pushed to Radarr/Sonarr, which set per-torrent limits in qBittorrent on grab)
 st, indexers = call(p['url'], p['key'], 'GET', '/indexer')
@@ -211,7 +299,7 @@ for name, goal in TRACKERS.items():
     print(f'   {name} torrents: {len(stale)} share limits updated')
 
 # health
-for name, (u, k) in {**{n: (a['url'], a['key']) for n, a in APPS.items()}, 'prowlarr': (p['url'], p['key'])}.items():
+for name, (u, k) in {**{n: (a['url'], a['key']) for n, a in APPS.items()}, 'bookshelf': (b, bk), 'prowlarr': (p['url'], p['key'])}.items():
     st, h = call(u, k, 'GET', '/health')
     msgs = [x['message'] for x in h] if st == 200 else [f'HTTP {st}']
     print(f'== {name} health: ' + ('OK' if not msgs else ' | '.join(msgs)))
