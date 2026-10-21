@@ -1,0 +1,75 @@
+# Libation: nightly backup of the user's Audible library as DRM-free .m4b into the DSM share `audiobooks`, folder
+# audible/ (Audiobookshelf reads it). The image runs once and exits (SLEEP_TIME unset): scan the account, download +
+# decrypt anything new. /config (Longhorn) holds AccountsSettings.json (Audible tokens) and Libation's DB. The account
+# is signed in once by hand with LibationCli login-external (README "Media stack plan" 8); tokens never go to git or
+# Vault. Settings.json comes from git: the image copies it into /config-internal and never writes it back.
+controllers:
+  libation:
+    type: cronjob
+    cronjob:
+      schedule: "30 3 * * *"
+      timeZone: America/New_York
+      concurrencyPolicy: Forbid
+      backoffLimit: 0                 # a failed night just shows as a failed Job; the next night retries
+      successfulJobsHistory: 3
+      failedJobsHistory: 3
+      activeDeadlineSeconds: 21600    # 6h: the first run downloads the whole library; later nights resume
+    pod:
+      restartPolicy: Never
+      securityContext:   # DSM user media (files on the NAS owned by 1029:100)
+        runAsUser: 1029
+        runAsGroup: 100
+        fsGroup: 100
+        fsGroupChangePolicy: OnRootMismatch
+    containers:
+      app:
+        image:
+          repository: rmcrackan/libation
+          tag: 14.2.2
+        env:
+          TZ: America/New_York
+          LIBATION_BOOKS_DIR: /audiobooks/audible
+        resources:
+          requests:
+            cpu: 250m
+            memory: 512Mi
+          limits:
+            memory: 2Gi
+
+configMaps:
+  settings:
+    data:
+      # Audiobookshelf expects Author/Title folders; one decrypted .m4b per book (no chapter split, no MP3 re-encode)
+      Settings.json: |
+        {
+          "FolderTemplate": "<first author>/<title short>",
+          "FileTemplate": "<title short>",
+          "SplitFilesByChapter": false,
+          "DecryptToLossy": false,
+          "DownloadCoverArt": true
+        }
+
+persistence:
+  # Audible account tokens + Libation DB: Longhorn
+  config:
+    type: persistentVolumeClaim
+    accessMode: ReadWriteOnce
+    size: 1Gi
+    globalMounts:
+      - path: /config
+  settings:
+    type: configMap
+    identifier: settings
+    globalMounts:
+      - { path: /config/Settings.json, subPath: Settings.json, readOnly: true }
+  # the entrypoint copies config here; writable for uid 1029 whatever the image's owner is
+  internal:
+    type: emptyDir
+    globalMounts:
+      - path: /config-internal
+  # DSM share `audiobooks` (helm/charts/media-storage); Libation writes only under audible/
+  audiobooks:
+    type: persistentVolumeClaim
+    existingClaim: audiobooks
+    globalMounts:
+      - path: /audiobooks
