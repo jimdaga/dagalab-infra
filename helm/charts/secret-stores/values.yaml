@@ -91,9 +91,6 @@ externalSecrets:
       - secretKey: HOMEPAGE_VAR_SEERR_KEY   # Seerr API key (scripts/seerr-setup.sh)
         key: seerr
         property: api-key
-      - secretKey: HOMEPAGE_VAR_AUDIOBOOKSHELF_KEY   # read-only `homepage` user's API key (scripts/audiobookshelf-setup.sh)
-        key: audiobookshelf
-        property: homepage-key
       - secretKey: HOMEPAGE_VAR_BOOKSHELF_KEY   # read-only use by Homepage widgets
         key: bookshelf
         property: api-key
@@ -158,6 +155,14 @@ externalSecrets:
       - secretKey: HOMEPAGE_VAR_HA_TOKEN
         key: home-assistant
         property: api-token
+  # Audiobookshelf's read-only `homepage` user's API key. Own ExternalSecret (mounted optional), like homepage-ha: the Vault
+  # key only exists after scripts/audiobookshelf-setup.sh, and it mustn't hold up the `homepage` Secret on a rebuild.
+  - name: homepage-audiobookshelf
+    namespace: homepage
+    data:
+      - secretKey: HOMEPAGE_VAR_AUDIOBOOKSHELF_KEY
+        key: audiobookshelf
+        property: homepage-key
   # Prometheus scrapes Home Assistant's /api/prometheus with the same long-lived token
   - name: home-assistant-prometheus
     namespace: home-assistant

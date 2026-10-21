@@ -42,7 +42,8 @@ controllers:
             memory: 1Gi
 
   # Hourly: delete finished audiobook torrents (torrent + downloaded files in /data/downloads/audiobooks) once they've
-  # reached ratio 3 AND seeded 14 days AND Bookshelf has imported them. qBittorrent's share limits stop at EITHER
+  # reached ratio 3 AND seeded 14 days AND Bookshelf's history shows them imported (positive proof: a torrent it never
+  # matched, or one added by hand, is never deleted). qBittorrent's share limits stop at EITHER
   # limit, hence this job. The library copy (DSM share `audiobooks`) is untouched; movies/tv seed forever as before.
   # Talks to qBittorrent over the pod network (no login, like Sonarr) and to Bookshelf with its API key.
   seed-cleanup:
@@ -70,7 +71,7 @@ controllers:
           MIN_SEED_DAYS: "14"
         envFrom:
           - secretRef:
-              name: bookshelf   # READARR__AUTH__APIKEY: Bookshelf's queue = downloads not imported yet
+              name: bookshelf   # READARR__AUTH__APIKEY: Bookshelf's import history
         resources:
           requests:
             cpu: 10m
@@ -89,14 +90,14 @@ configMaps:
         DOWNLOADS = '/data/downloads/audiobooks'
 
 
-        def should_delete(t, queued, min_ratio, min_seconds, category='audiobooks'):
+        def should_delete(t, imported, min_ratio, min_seconds, category='audiobooks'):
             # every condition must hold: finished, in the audiobooks downloads, ratio AND time reached, imported
             return (t.get('category') == category
                     and (t.get('save_path') or '').rstrip('/') == DOWNLOADS
                     and t.get('progress') == 1
                     and t.get('ratio', 0) >= min_ratio
                     and t.get('seeding_time', 0) >= min_seconds
-                    and t['hash'].upper() not in queued)
+                    and t['hash'].upper() in imported)
 
 
         def get(url, headers=None):
@@ -108,10 +109,12 @@ configMaps:
             cat, ratio = os.environ['CATEGORY'], float(os.environ['MIN_RATIO'])
             secs = int(os.environ['MIN_SEED_DAYS']) * 86400
             dry = os.environ.get('DRY_RUN') == '1'
-            queue = get(f'{BOOKSHELF}/queue?pageSize=1000', dict([('X-Api-Key', os.environ['READARR__AUTH__APIKEY'])]))
-            queued = set(r['downloadId'].upper() for r in queue.get('records', []) if r.get('downloadId'))
+            # downloads Bookshelf imported: history events 3 (BookFileImported) and 8 (DownloadImported)
+            hist = get(f'{BOOKSHELF}/history?pageSize=5000&eventType=3&eventType=8',
+                       dict([('X-Api-Key', os.environ['READARR__AUTH__APIKEY'])]))
+            imported = set(r['downloadId'].upper() for r in hist.get('records', []) if r.get('downloadId'))
             torrents = get(f'{QBT}/torrents/info?category={urllib.parse.quote(cat)}')
-            done = [t for t in torrents if should_delete(t, queued, ratio, secs, cat)]
+            done = [t for t in torrents if should_delete(t, imported, ratio, secs, cat)]
             for t in done:
                 print(f"{'would delete' if dry else 'deleting'}: {t['name']} (ratio {t['ratio']:.2f}, {t['seeding_time'] // 86400} days)")
             if done and not dry:

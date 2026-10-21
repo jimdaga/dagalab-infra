@@ -18,11 +18,15 @@ certificate:
 # Jellyfin lives on an unadvertised subdomain (wildcard DNS + wildcard cert, so the name is in neither
 # Cloudflare's per-host records nor CT logs). Not a sub-path: some TV apps (Trovu) ignore a server path.
 # Seerr (requests) signs in with the same Jellyfin accounts; its local-account login is off (scripts/seerr-setup.py).
-# Audiobookshelf (books) uses its own accounts; it was initialised (root user) before this route existed.
+# Audiobookshelf (books) uses its own accounts. Its POST /init creates the root user on an uninitialised server (fresh
+# install or lost config volume), so the public route 404s every spelling Express would route to it (case-insensitive,
+# optional /audiobookshelf base path, extra slashes); scripts/audiobookshelf-setup.sh inits over a port-forward.
+# denyPathRegex (optional): RE2 regex of paths answered 404 by Envoy instead of the backend.
 routes:
   - { name: jellyfin,       host: popcorn,  namespace: media, service: jellyfin,       port: 8096 }
   - { name: seerr,          host: requests, namespace: media, service: seerr,          port: 5055 }
-  - { name: audiobookshelf, host: books,    namespace: media, service: audiobookshelf, port: 80 }
+  - { name: audiobookshelf, host: books,    namespace: media, service: audiobookshelf, port: 80,
+      denyPathRegex: '(?i)^(/+audiobookshelf)?/+init/*$' }
 
 # Every other hostname (bare domain, any made-up subdomain, the raw IP) gets this page straight from
 # Envoy, so scanners see nothing that identifies the server. The body is an Envoy format string: never

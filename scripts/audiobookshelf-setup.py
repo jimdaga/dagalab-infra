@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Idempotent Audiobookshelf setup over its API (port-forward on 127.0.0.1:13378). Called by audiobookshelf-setup.sh.
-Env: ABS_ROOT_PASSWORD, ABS_HAVE_HOMEPAGE_KEY (1 = already in Vault). Prints HOMEPAGE_KEY=... when it creates one."""
+Env: ABS_ROOT_PASSWORD, ABS_HOMEPAGE_KEY (the key in Vault, may be empty). Prints HOMEPAGE_KEY=... when it creates one
+(no key yet, or the stored one no longer works, e.g. after a rebuilt config volume)."""
 import json, os, secrets, sys, urllib.error, urllib.request
 
 U = 'http://127.0.0.1:13378'
@@ -66,11 +67,12 @@ if user is None:
     log('user homepage: created (read-only)')
 else:
     log('user homepage: present')
-if os.environ.get('ABS_HAVE_HOMEPAGE_KEY') != '1':
+stored = os.environ.get('ABS_HOMEPAGE_KEY', '')
+if not stored or call('GET', '/api/libraries', tok=stored)[0] != 200:
     st, r = call('POST', '/api/api-keys', {'name': 'homepage', 'userId': user['id'], 'isActive': True}, tok=tok)
     if st != 200:
         sys.exit(f'create API key failed: {st} {r}')
     print(f"HOMEPAGE_KEY={r['apiKey']['apiKey']}")
-    log('api key homepage: created')
+    log('api key homepage: created' + (' (stored key was rejected)' if stored else ''))
 else:
-    log('api key homepage: already in Vault')
+    log('api key homepage: in Vault and valid')

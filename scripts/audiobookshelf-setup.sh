@@ -15,7 +15,7 @@ if [[ -z "$pw" ]]; then
   v kv put secret/audiobookshelf root-password="$pw" >/dev/null
   echo "generated secret/audiobookshelf root-password" >&2
 fi
-export ABS_ROOT_PASSWORD="$pw" ABS_HAVE_HOMEPAGE_KEY=$([[ -n "$(field homepage-key)" ]] && echo 1 || echo 0)
+export ABS_ROOT_PASSWORD="$pw" ABS_HOMEPAGE_KEY="$(field homepage-key)"   # checked against ABS; replaced if stale
 
 kubectl -n media port-forward svc/audiobookshelf 13378:80 >/dev/null 2>&1 & pf=$!
 trap 'kill $pf 2>/dev/null' EXIT

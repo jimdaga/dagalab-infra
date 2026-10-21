@@ -1,25 +1,54 @@
-{{- range .Values.routes }}
+{{- range $r := .Values.routes }}
+{{- $name := $r.name | default $r.host }}
+{{- if $r.denyPathRegex }}
+---
+# 404 straight from Envoy for paths that must never be reachable from the internet (denyPathRegex)
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: HTTPRouteFilter
+metadata:
+  name: {{ $name }}-deny
+  namespace: {{ $r.namespace }}
+spec:
+  directResponse:
+    contentType: text/plain
+    statusCode: 404
+    body:
+      type: Inline
+      inline: "Not Found"
+{{- end }}
 ---
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:
-  name: {{ .name | default .host }}
-  namespace: {{ .namespace }}
+  name: {{ $name }}
+  namespace: {{ $r.namespace }}
 spec:
   parentRefs:
     - name: {{ $.Values.gateway.name }}
       namespace: {{ $.Release.Namespace }}
       sectionName: https
   hostnames:
-    - {{ ternary (printf "%s.%s" .host $.Values.domain) $.Values.domain (ne .host "") | quote }}
+    - {{ ternary (printf "%s.%s" $r.host $.Values.domain) $.Values.domain (ne $r.host "") | quote }}
   rules:
-    - {{- with .pathPrefix }}
+    {{- with $r.denyPathRegex }}
+    - matches:
+        - path:
+            type: RegularExpression
+            value: {{ . | quote }}
+      filters:
+        - type: ExtensionRef
+          extensionRef:
+            group: gateway.envoyproxy.io
+            kind: HTTPRouteFilter
+            name: {{ $name }}-deny
+    {{- end }}
+    - {{- with $r.pathPrefix }}
       matches:
         - path:
             type: PathPrefix
             value: {{ . }}
       {{- end }}
       backendRefs:
-        - name: {{ .service }}
-          port: {{ .port }}
+        - name: {{ $r.service }}
+          port: {{ $r.port }}
 {{- end }}
