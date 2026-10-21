@@ -41,6 +41,88 @@ controllers:
           limits:
             memory: 1Gi
 
+  # Hourly: delete finished audiobook torrents (torrent + downloaded files in /data/downloads/audiobooks) once they've
+  # reached ratio 3 AND seeded 14 days AND Bookshelf has imported them. qBittorrent's share limits stop at EITHER
+  # limit, hence this job. The library copy (DSM share `audiobooks`) is untouched; movies/tv seed forever as before.
+  # Talks to qBittorrent over the pod network (no login, like Sonarr) and to Bookshelf with its API key.
+  seed-cleanup:
+    type: cronjob
+    cronjob:
+      schedule: "17 * * * *"
+      concurrencyPolicy: Forbid
+      backoffLimit: 0
+      successfulJobsHistory: 1
+      failedJobsHistory: 3
+    pod:
+      restartPolicy: Never
+      securityContext:
+        runAsUser: 65534
+        runAsGroup: 65534
+    containers:
+      app:
+        image:
+          repository: python
+          tag: 3.13.15-alpine3.23
+        command: [python3, /app/seed-cleanup.py]
+        env:
+          CATEGORY: audiobooks
+          MIN_RATIO: "3"
+          MIN_SEED_DAYS: "14"
+        envFrom:
+          - secretRef:
+              name: bookshelf   # READARR__AUTH__APIKEY: Bookshelf's queue = downloads not imported yet
+        resources:
+          requests:
+            cpu: 10m
+            memory: 32Mi
+          limits:
+            memory: 128Mi
+
+configMaps:
+  scripts:
+    data:
+      seed-cleanup.py: |
+        import json, os, urllib.parse, urllib.request
+
+        QBT = 'http://qbittorrent.media.svc.cluster.local:8080/api/v2'
+        BOOKSHELF = 'http://bookshelf.media.svc.cluster.local:8787/api/v1'
+        DOWNLOADS = '/data/downloads/audiobooks'
+
+
+        def should_delete(t, queued, min_ratio, min_seconds, category='audiobooks'):
+            # every condition must hold: finished, in the audiobooks downloads, ratio AND time reached, imported
+            return (t.get('category') == category
+                    and (t.get('save_path') or '').rstrip('/') == DOWNLOADS
+                    and t.get('progress') == 1
+                    and t.get('ratio', 0) >= min_ratio
+                    and t.get('seeding_time', 0) >= min_seconds
+                    and t['hash'].upper() not in queued)
+
+
+        def get(url, headers=None):
+            with urllib.request.urlopen(urllib.request.Request(url, headers=headers or dict()), timeout=30) as r:
+                return json.loads(r.read())
+
+
+        def main():
+            cat, ratio = os.environ['CATEGORY'], float(os.environ['MIN_RATIO'])
+            secs = int(os.environ['MIN_SEED_DAYS']) * 86400
+            dry = os.environ.get('DRY_RUN') == '1'
+            queue = get(f'{BOOKSHELF}/queue?pageSize=1000', dict([('X-Api-Key', os.environ['READARR__AUTH__APIKEY'])]))
+            queued = set(r['downloadId'].upper() for r in queue.get('records', []) if r.get('downloadId'))
+            torrents = get(f'{QBT}/torrents/info?category={urllib.parse.quote(cat)}')
+            done = [t for t in torrents if should_delete(t, queued, ratio, secs, cat)]
+            for t in done:
+                print(f"{'would delete' if dry else 'deleting'}: {t['name']} (ratio {t['ratio']:.2f}, {t['seeding_time'] // 86400} days)")
+            if done and not dry:
+                form = urllib.parse.urlencode(dict(hashes='|'.join(t['hash'] for t in done), deleteFiles='true')).encode()
+                urllib.request.urlopen(urllib.request.Request(f'{QBT}/torrents/delete', data=form), timeout=30)
+            print(f'{len(torrents)} {cat} torrents; {len(done)} past ratio {ratio:g} and {secs // 86400} days')
+
+
+        if __name__ == '__main__':
+            main()
+
 service:
   app:
     controller: bookshelf
@@ -54,17 +136,30 @@ persistence:
     type: persistentVolumeClaim
     accessMode: ReadWriteOnce
     size: 5Gi
-    globalMounts:
-      - path: /config
+    advancedMounts:
+      bookshelf:
+        app:
+          - path: /config
   # Shared media share: downloads (helm/charts/media-storage)
   data:
     type: persistentVolumeClaim
     existingClaim: media-data
-    globalMounts:
-      - path: /data
+    advancedMounts:
+      bookshelf:
+        app:
+          - path: /data
   # DSM share `audiobooks`: library/ is the root folder
   audiobooks:
     type: persistentVolumeClaim
     existingClaim: audiobooks
-    globalMounts:
-      - path: /audiobooks
+    advancedMounts:
+      bookshelf:
+        app:
+          - path: /audiobooks
+  scripts:
+    type: configMap
+    identifier: scripts
+    advancedMounts:
+      seed-cleanup:
+        app:
+          - { path: /app/seed-cleanup.py, subPath: seed-cleanup.py, readOnly: true }

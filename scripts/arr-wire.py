@@ -285,6 +285,15 @@ if any(prefs.get(n) != v for n, v in QBT_PREFS.items()):
     print('   preferences (unlimited seeding, 3 downloads): updated')
 else:
     print('   preferences (unlimited seeding, 3 downloads): already set')
+# audiobooks category (created by Bookshelf's download client): explicit save path like movies/tv; the hourly
+# seed-cleanup CronJob (argocd/apps/bookshelf) only deletes torrents under exactly this path
+cats = qbt('/torrents/categories')
+if cats.get('audiobooks', {}).get('savePath') != '/data/downloads/audiobooks':
+    qbt('/torrents/createCategory' if 'audiobooks' not in cats else '/torrents/editCategory',
+        {'category': 'audiobooks', 'savePath': '/data/downloads/audiobooks'})
+    print('   category audiobooks: save path /data/downloads/audiobooks')
+else:
+    print('   category audiobooks: present')
 ok_vals = lambda v: (-1, -2) if v == -1 else (v,)   # -2 = "use global", and the global limits are off: also unlimited
 for name, goal in TRACKERS.items():
     ratio, minutes = (-1 if goal['ratio'] is None else goal['ratio']), (-1 if goal['minutes'] is None else goal['minutes'])   # -1 = no limit
