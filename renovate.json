@@ -27,11 +27,11 @@
       "versioning": "regex:^(?<major>\\d+)\\.(?<minor>\\d+)\\.(?<patch>\\d+)\\.(?<build>\\d+)-[0-9a-f]+$"
     },
     {
-      "description": "Bookshelf tags are hardcover-v<version>[.<build>]: keep the hardcover- flavour and order by version+build.",
+      "description": "Bookshelf tags are softcover-v<version>[.<build>]: keep the softcover- (Goodreads metadata) flavour and order by version+build.",
       "matchPackageNames": [
         "ghcr.io/pennydreadful/bookshelf"
       ],
-      "versioning": "regex:^hardcover-v(?<major>\\d+)\\.(?<minor>\\d+)\\.(?<patch>\\d+)(\\.(?<build>\\d+))?$"
+      "versioning": "regex:^softcover-v(?<major>\\d+)\\.(?<minor>\\d+)\\.(?<patch>\\d+)(\\.(?<build>\\d+))?$"
     }
   ]
 }

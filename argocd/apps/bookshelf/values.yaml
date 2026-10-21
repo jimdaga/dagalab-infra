@@ -1,4 +1,6 @@
-# Bookshelf: audiobook manager (Readarr fork, Hardcover metadata), the *arr for audiobooks. Root folder
+# Bookshelf: audiobook manager (Readarr fork), the *arr for audiobooks. `softcover` image = Goodreads metadata via the
+# hosted api.bookinfo.pro (the `hardcover` flavour's hosted search, hardcover.bookinfo.pro, has been broken upstream
+# since 2026-08, bookshelf issue #179; switching flavours later means re-adding authors). Root folder
 # /audiobooks/library (DSM share `audiobooks`); qBittorrent category `audiobooks` lands in /data/downloads/audiobooks
 # on the media share, so imports copy (hardlinks can't cross shares; audiobooks are small). Audiobooks only: the
 # "Audiobook" quality profile allows just M4B/MP3 (scripts/arr-wire.py owns it; Recyclarr doesn't support
@@ -10,7 +12,7 @@ controllers:
       app:
         image:
           repository: ghcr.io/pennydreadful/bookshelf
-          tag: hardcover-v0.4.21.182
+          tag: softcover-v0.4.21.182
         env:
           TZ: America/New_York
           PUID: "1029"
