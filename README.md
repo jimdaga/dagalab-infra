@@ -229,7 +229,7 @@ Deploy order, so Jellyfin scans an already clean, ID-tagged library once:
 - [ ] UniFi DNS: `bazarr.lab.internal` → 192.168.3.201
 - [ ] Dashboard trial: keep Homepage or Homarr, then remove the other (Argo app, lan-gateway route, UniFi record, Vault `secret/homarr` if Homarr goes; Homarr reuses Homepage's Jellyfin key)
 - [ ] UniFi DNS: `homarr.lab.internal` → 192.168.3.201
-- [ ] UniFi DNS: `books.lab.internal`, `bookshelf.lab.internal` → 192.168.3.201
+- [x] UniFi DNS: `books.lab.internal`, `bookshelf.lab.internal` → 192.168.3.201
 - [x] UniFi DNS: `home.lab.internal` → 192.168.3.201
 - [ ] Home Assistant: review Settings → Devices & services → Discovered (main-LAN devices) and add the ones wanted
 - [ ] Audiobooks follow-ups (after Audiobookshelf/Bookshelf/Libation are running; spec `docs/superpowers/specs/2026-10-20-audiobooks-design.md`): Bookshelf Discord notifications (`scripts/notify-setup.py`); Decluttarr + Unpackerr for Bookshelf; Exportarr `readarr` sidecar, Grafana panels and alert rules for Bookshelf, plus an alert on a failed Libation Job
