@@ -36,7 +36,7 @@ Lab VLAN 3 on the UniFi Cloud Gateway Ultra: `192.168.3.0/24`.
 | 192.168.3.100 | bastion.lab.internal: Raspberry Pi, Ubuntu (static, `scripts/host-config.sh`; tooling in `bastion/`) |
 | 192.168.3.101–199 | UniFi DHCP pool. UniFi defaults a new network to .6–.254, so shrink it to this range: fixed-IP reservations protect the four hosts, but the API VIP (.10) and the MetalLB pool have no MAC to reserve against. |
 | 192.168.3.200–229 | MetalLB pool. **Must be outside the DHCP pool.** |
-| 192.168.3.200 | Public shared gateway (`helm/charts/shared-gateway`): the UCG forwards WAN TCP 443 here. Only Jellyfin at `popcorn.dagaflix.com` and Seerr at `requests.dagaflix.com`; every other hostname (bare domain, made-up subdomains, raw IP) gets a blank placeholder page, `www` redirects to the bare domain. Platform UIs never go on it |
+| 192.168.3.200 | Public shared gateway (`helm/charts/shared-gateway`): the UCG forwards WAN TCP 443 here. Only Jellyfin at `popcorn.dagaflix.com` and Seerr at `requests.dagaflix.com` and Audiobookshelf at `books.dagaflix.com`; every other hostname (bare domain, made-up subdomains, raw IP) gets a blank placeholder page, `www` redirects to the bare domain. Platform UIs never go on it |
 | 192.168.3.201 | LAN gateway: `https://<app>.lab.internal` (`helm/charts/lan-gateway`) |
 | 192.168.3.202 | Plex (`argocd/apps/plex`): LoadBalancer TCP 32400, `externalTrafficPolicy: Local`. The UCG forwards WAN TCP 32400 here (direct remote access for friends; not via Envoy) |
 
@@ -87,6 +87,9 @@ Two zones, two owners:
 | 0 | prowlarr | Indexer manager; API key from Vault (`secret/prowlarr`), synced to Radarr/Sonarr |
 | 0 | jellyfin | Media server: library read-only from `media-data`, Quick Sync via the GPU plugin; `https://` and plain `http://jellyfin.lab.internal` |
 | 0 | seerr | Request UI (Jellyfin sign-in) → Radarr/Sonarr; public `https://requests.dagaflix.com`, LAN `https://seerr.lab.internal` |
+| 0 | audiobookshelf | Audiobooks + podcasts server; public `https://books.dagaflix.com`, LAN `https://books.lab.internal` |
+| 0 | bookshelf | Audiobook manager (Readarr fork) → `audiobooks` share `library/`; `https://bookshelf.lab.internal`; hourly `seed-cleanup` CronJob |
+| 0 | libation | Nightly CronJob: Audible library → `audiobooks` share `audible/` |
 | 0 | radarr | Movies → `/data/movies`; config on Longhorn, API key from Vault |
 | 0 | sonarr | TV → `/data/tv`; config on Longhorn, API key from Vault |
 | 0 | qbittorrent | qBittorrent behind a Gluetun sidecar (PIA OpenVPN, port forwarding); downloads under `/data` on `media-data` |
@@ -112,6 +115,8 @@ ingress-nginx was retired in March 2026, and Gateway API is where things are hea
 |---|---|
 | `jellyfin.lab.internal` | Jellyfin (also plain `http://` for TV apps) |
 | `seerr.lab.internal` | Seerr (requests) |
+| `books.lab.internal` | Audiobookshelf (audiobooks + podcasts) |
+| `bookshelf.lab.internal` | Bookshelf (audiobook requests) |
 | `homepage.lab.internal` | Homepage: dashboard linking everything below, with cluster/node CPU+memory and pod status (read-only ClusterRole), Longhorn usage, Sonarr/Radarr release calendar, VPN status (Gluetun control server, API key from Vault `secret/gluetun`). Config in `argocd/apps/homepage/values.yaml` |
 | `homarr.lab.internal` | Homarr (trial): same services as Homepage as a drag-and-drop board with live integrations (Jellyfin now playing, Seerr requests, calendar, downloads, VPN, Prowlarr, Bazarr, missing media; NAS health/volumes/resource charts and UniFi summary + Wi-Fi/wired clients and a Home Assistant integration on Platform, via Homepage's `homepage` device accounts: UCG over HTTPS with its self-signed cert trusted + pinned to the IP, DSM over HTTP :5000 on the lab VLAN since its cert's CA isn't served). Config is in its SQLite DB on Longhorn, **not** in git; seeded by `scripts/homarr-setup.sh` (admin `jim`, password + API key in Vault `secret/homarr`); `scripts/homarr-board.py` lays out four boards shown as header tabs (Home, Library, Downloads, Platform; re-runnable, resets UI edits) |
 | `home.lab.internal` | Home Assistant: `hostNetwork` pod (discovery from the node's VLAN 3 interface; port 8123 open on that node). `configuration.yaml` (location, units, Prometheus) is in `argocd/apps/home-assistant/values.yaml`; everything made in the UI lives on its Longhorn volume, **not** in git. First run, proxy trust for the gateway (HA 2026.10+ keeps `http:` settings in `.storage` and only applies a change once it's confirmed, so YAML can't set them) and lab integrations: `scripts/home-assistant-setup.sh` (admin `jim`, password + API token in Vault `secret/home-assistant`) |
@@ -191,7 +196,7 @@ Deploy order, so Jellyfin scans an already clean, ID-tagged library once:
    - **Decluttarr**: every 10 min removes stalled (2h, no connections), failed, metadata-stuck and orphaned downloads so the *arr apps grab an alternative, and searches 3 missing items per run (each at most weekly). Private-tracker torrents are removed outright (a stalled one would hold a download slot forever). Tag a torrent `Keep` in qBittorrent to protect it. Ran in `test_run` mode first; live since 2026-10-14.
    - **Monitoring**: Exportarr sidecars (Sonarr/Radarr/Prowlarr/Bazarr) + Unpackerr metrics → Prometheus; Grafana dashboards "Media: pipeline overview" and "Media: Sonarr / Radarr / Prowlarr (Exportarr)"; alert rules in `helm/charts/media-monitoring/files/rules.yaml`. Alertmanager has no receiver yet (Discord TODO), so alerts only show in Grafana/Alertmanager.
    - **Notifications** (Discord server `dagalab`; webhook URLs in Vault `secret/discord` keys `webhook-alerts`, `webhook-media`, `webhook-media-noise`, synced as Secret `discord` to `monitoring` and `media`). Each event goes to one channel. **#alerts**: Alertmanager (all alerts, resolved too; Watchdog/InfoInhibitor dropped) + Sonarr/Radarr "manual import needed". **#media**: Sonarr release imported, Radarr movie imported, Seerr requests (pending, auto-approved, failed) and issues, Jellyfin watch activity (someone started or finished a movie/episode; Webhook plugin, home videos excluded). **#media-noise**: grabs, upgrades, deletions, Bazarr subtitle downloads. App side applied by `scripts/notify-setup.sh [--test]`; *arr health, indexer and Unpackerr failures come only from Alertmanager.
-   - Setup order after a rebuild: `vault-bootstrap.sh` → `arr-run.sh arr-wire.py` → `jellyfin-setup.sh` → `seerr-setup.sh` → `bazarr-setup.sh` (all idempotent; Recyclarr/Unpackerr/Decluttarr need nothing).
+   - Setup order after a rebuild: `vault-bootstrap.sh` → `arr-run.sh arr-wire.py` → `jellyfin-setup.sh` → `seerr-setup.sh` → `bazarr-setup.sh` → `audiobookshelf-setup.sh` (all idempotent; Recyclarr/Unpackerr/Decluttarr need nothing).
 
 7. **Plex** (`https://plex.lab.internal`, direct `192.168.3.202:32400`): deployed 2026-10-18 for sharing Movies + TV with friends (they have Plex Pass; this server doesn't, so CPU transcoding only). Library read-only, DB on Longhorn. One-time setup (repeat only after losing the `/config` volume):
    1. Claim: `kubectl -n media port-forward svc/plex 32400:32400`, open `http://localhost:32400/web`, sign in; Plex sees localhost and offers to claim the server. No claim token in git or Vault.
@@ -201,6 +206,14 @@ Deploy order, so Jellyfin scans an already clean, ID-tagged library once:
    5. Settings → Network → "LAN Networks" = `192.168.0.0/24,192.168.3.0/24,10.42.0.0/16` (main LAN, VLAN 3, pod network for requests via the LAN gateway; the DMZ VLAN 4 is deliberately remote). Leave "List of IP addresses and networks that are allowed without auth" **empty**: the server is internet-facing.
    6. UniFi: port forward WAN TCP 32400 → 192.168.3.202:32400. Plex Settings → Remote Access → "Manually specify public port" 32400 → "Fully accessible outside your network".
    7. Share Movies + TV with friends (Plex web → Settings → Manage Library Access).
+8. **Audiobooks** (deployed 2026-10-20; spec `docs/superpowers/specs/2026-10-20-audiobooks-design.md`). Two DSM shares (NFS rule like `trickplay`: 192.168.3.11-13 RW, root squashed to guest, user `media` RW): `audiobooks` (`/volume2/audiobooks`: `library/` = Bookshelf root, `audible/` = Libation) and `podcasts` (`/volume2/podcasts`). Bookshelf downloads land in `media-data` `downloads/audiobooks` (qBittorrent category `audiobooks`) and are copied into `library/`; the hourly `bookshelf-seed-cleanup` CronJob deletes a torrent and its downloaded files once it has ratio ≥ 3 **and** 14 days seeded **and** is imported. One-time steps (repeat only after losing the volumes):
+   1. Folders, as the `media` user: `kubectl -n media exec deploy/bookshelf -- s6-setuidgid abc mkdir -p /audiobooks/library /audiobooks/audible`.
+   2. `VAULT_TOKEN=... scripts/audiobookshelf-setup.sh` **before** the `books` route is on the shared gateway: root `jim` (password in Vault `secret/audiobookshelf`), libraries Audiobooks (`/audiobooks/library` + `/audiobooks/audible`, hourly scan) and Podcasts (`/podcasts`), read-only `homepage` user + key.
+   3. `scripts/arr-run.sh scripts/arr-wire.py`: Bookshelf's Audiobook profile (MP3/M4B, M4B preferred), root folder, qBittorrent category + save path, Prowlarr app (categories 3030 + 3000). Prowlarr only syncs indexers whose recent audio results pass Bookshelf's test (wigornot didn't, 2026-10-20; it's retried every sync).
+   4. Audible: a temporary pod on Libation's PVC (`libation`, image `rmcrackan/libation`, `sleep`, uid 1029), copy the git `Settings.json` into `/config` (the CLI needs one), then in a terminal `kubectl -n media exec -it libation-login -- /libation/LibationCli login-external --libationFiles /config -a <audible email> -l us`; open the URL, sign in, paste the final URL back; `list-accounts` should say authenticated; delete the pod. Libation keeps its token key in `/config/libation-master.key` (on the PVC). First run: `kubectl -n media create job --from=cronjob/libation libation-first`.
+   5. Family accounts in Audiobookshelf (Settings → Users): long random passwords, no upload/delete. Phone apps use `https://books.dagaflix.com` everywhere.
+   6. UniFi DNS: `books.lab.internal`, `bookshelf.lab.internal` → 192.168.3.201.
+   Requesting a book: search it in Bookshelf and add it (only that book is monitored); it appears in Audiobookshelf within the hour.
 
 ## TODO
 
@@ -216,6 +229,7 @@ Deploy order, so Jellyfin scans an already clean, ID-tagged library once:
 - [ ] UniFi DNS: `bazarr.lab.internal` → 192.168.3.201
 - [ ] Dashboard trial: keep Homepage or Homarr, then remove the other (Argo app, lan-gateway route, UniFi record, Vault `secret/homarr` if Homarr goes; Homarr reuses Homepage's Jellyfin key)
 - [ ] UniFi DNS: `homarr.lab.internal` → 192.168.3.201
+- [ ] UniFi DNS: `books.lab.internal`, `bookshelf.lab.internal` → 192.168.3.201
 - [x] UniFi DNS: `home.lab.internal` → 192.168.3.201
 - [ ] Home Assistant: review Settings → Devices & services → Discovered (main-LAN devices) and add the ones wanted
 - [ ] Audiobooks follow-ups (after Audiobookshelf/Bookshelf/Libation are running; spec `docs/superpowers/specs/2026-10-20-audiobooks-design.md`): Bookshelf Discord notifications (`scripts/notify-setup.py`); Decluttarr + Unpackerr for Bookshelf; Exportarr `readarr` sidecar, Grafana panels and alert rules for Bookshelf, plus an alert on a failed Libation Job

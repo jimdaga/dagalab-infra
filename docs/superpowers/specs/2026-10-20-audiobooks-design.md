@@ -150,3 +150,23 @@ libraries.
 6. Audiobookshelf shows both books within an hour (scheduled scan) or immediately after a manual scan.
 7. Phone on cellular: plays a book (seek works mid-file) and a podcast episode; progress shows on a second device.
 8. Homepage tiles render with widgets (Playwright screenshot check).
+
+## Changes during implementation (2026-10-20)
+
+These supersede the sections above where they differ.
+
+1. **Storage.** subPath mounts can't work on `media-data` (root is squashed to guest and DSM denies guest, so kubelet
+   can't prepare subdirectories) and the NAS refuses subdirectory mounts. The user created two DSM shares instead:
+   `audiobooks` (`/volume2/audiobooks`: `library/` = Bookshelf root, `audible/` = Libation) and `podcasts`
+   (`/volume2/podcasts`), each its own PV/PVC in `helm/charts/media-storage`. Audiobookshelf mounts only these
+   (`/audiobooks` read-only, `/podcasts` read-write), Libation only `audiobooks`. Bookshelf mounts both `media-data`
+   (downloads) and `audiobooks`; imports **copy** (hardlinks can't cross shares).
+2. **Seeding.** Audiobook torrents are deleted (torrent + downloaded files) by an hourly `seed-cleanup` CronJob in the
+   Bookshelf app once ratio ≥ 3 **and** 14 days seeded **and** imported (qBittorrent's share limits are OR-only).
+   Movies/TV keep seeding forever.
+3. **Bookshelf format.** Audiobooks-only comes from the quality profile alone; the default metadata profile is used.
+4. **Libation settings** come from a git ConfigMap (the image copies `Settings.json` in and never writes it back);
+   the CLI also needs a copy on the PVC for the one-time sign-in. Tokens are encrypted with
+   `/config/libation-master.key` on the same PVC.
+5. **Homepage** reads Audiobookshelf through a dedicated read-only `homepage` user's API key.
+6. **Indexers.** wigornot isn't synced to Bookshelf yet: Bookshelf's add-test needs recent results in 3000/3030.
