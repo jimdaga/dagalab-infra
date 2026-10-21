@@ -146,18 +146,42 @@ for name, a in APPS.items():
     # Quality profiles and custom formats (incl. no-AV1) are owned by Recyclarr (argocd/apps/recyclarr), not this script.
 
 # Bookshelf (Readarr fork, audiobooks only): /api/v1 and Readarr field names, so it gets its own section.
-# Audiobooks-only comes from the quality profile: only MP3/M4B allowed, M4B preferred. Recyclarr doesn't support
+# Audiobooks-only comes from the quality profile: only audio allowed, M4B > MP3 > Unknown Audio (TorrentLeech's
+# audiobook titles often say just "[AUDIOBOOK]", which parses as Unknown Audio). Recyclarr doesn't support
 # Readarr-family apps, so this script owns that profile (unlike Sonarr/Radarr's).
 BOOKSHELF = dict(url='http://127.0.0.1:18787/api/v1', key=os.environ['BOOKSHELF_KEY'], root='/audiobooks/library', cat='audiobooks', port=8787)
-AUDIO = [10, 12]   # MP3, M4B: profile items are ordered lowest -> highest preference
+AUDIO = [0, 13, 10, 12]   # Unknown Text, Unknown Audio, MP3, M4B: ordered lowest -> highest preference. Unknown Text is
+# needed for TorrentLeech (its "[AUDIOBOOK]" releases sit in a books category); the release profile below guards it
 b, bk = BOOKSHELF['url'], BOOKSHELF['key']
 st, status = call(b, bk, 'GET', '/system/status')
 print(f'== bookshelf {status.get("version") if st == 200 else st}')
 
+# Release profile: the RAW release title must say it's audio, so an untagged ebook in a books category (parsed as
+# Unknown Text, which the profile has to allow for TorrentLeech) is never grabbed. (A custom format can't do this: it
+# matches Bookshelf's parsed title, and TorrentLeech's "Title - Author [AUDIOBOOK]" doesn't parse; size limits are
+# disabled in Bookshelf's code.) Case-insensitive substring match.
+AUDIO_TERMS = ['audiobook', 'audio book', 'm4b', 'mp3', 'unabridged']
+st, cfs = call(b, bk, 'GET', '/customformat')
+for c in [c for c in cfs if c['name'] == 'Audiobook']:   # earlier attempt (custom format guard): remove
+    st, r = call(b, bk, 'DELETE', f'/customformat/{c["id"]}')
+    print(f'   custom format Audiobook: removed (HTTP {st})')
+    cfs = [x for x in cfs if x['id'] != c['id']]
+st, rps = call(b, bk, 'GET', '/releaseprofile')
+rp = next((r for r in rps if r.get('required')), None)
+want_rp = dict(enabled=True, required=AUDIO_TERMS, ignored=[], indexerId=0, tags=[])
+if rp and all(rp.get(k) == v for k, v in want_rp.items()):
+    print('   release profile (audio terms required): present')
+else:
+    body = dict(rp or {}, **want_rp)
+    st, r = call(b, bk, 'PUT' if rp else 'POST', f'/releaseprofile/{rp["id"]}' if rp else '/releaseprofile', body)
+    print(f'   release profile (audio terms required): {"updated" if rp else "created"} (HTTP {st})' if st in (200, 201, 202) else f'   release profile FAILED {st}: {r}')
+    ok &= st in (200, 201, 202)
+
 st, profs = call(b, bk, 'GET', '/qualityprofile')
 prof = next((x for x in profs if x['name'] == 'Audiobook'), None)
 flat = lambda items: [c for i in items for c in (i.get('items') or [i])]
-if prof and [c['quality']['id'] for c in flat(prof['items']) if c['allowed']] == AUDIO and prof['cutoff'] == 12:
+cf_ok = lambda pr: pr['minFormatScore'] == 0 and not any(fi['score'] for fi in pr['formatItems'])
+if prof and [c['quality']['id'] for c in flat(prof['items']) if c['allowed']] == AUDIO and prof['cutoff'] == 12 and cf_ok(prof):
     print('   quality profile Audiobook: present')
 else:
     st, schema = call(b, bk, 'GET', '/qualityprofile/schema')
@@ -165,7 +189,9 @@ else:
     for c in items:
         c['allowed'] = c['quality']['id'] in AUDIO
     items = [c for c in items if c['quality']['id'] not in AUDIO] + [next(c for c in items if c['quality']['id'] == q) for q in AUDIO]
-    body = dict(schema, name='Audiobook', upgradeAllowed=True, cutoff=12, items=items)
+    fitems = [dict(format=x['id'], name=x['name'], score=0) for x in cfs]
+    body = dict(schema, name='Audiobook', upgradeAllowed=True, cutoff=12, items=items, formatItems=fitems,
+                minFormatScore=0, cutoffFormatScore=0)
     if prof:
         body['id'] = prof['id']
     st, r = call(b, bk, 'PUT' if prof else 'POST', f'/qualityprofile/{prof["id"]}' if prof else '/qualityprofile', body)
@@ -236,16 +262,23 @@ for name, a in APPS.items():
         print(f'   application {impl} test FAILED {st}: {r}'); ok = False; continue
     st, r = call(p['url'], p['key'], 'POST', '/applications', app)
     print(f'   application {impl}: test OK, created (HTTP {st})' if st in (200, 201) else f'   create FAILED {st}: {r}'); ok &= st in (200, 201)
-# Bookshelf registers as a Readarr app; audiobook (3030) + general audio (3000: TorrentLeech has no audiobook category)
-if any(e['implementation'] == 'Readarr' for e in existing):
+# Bookshelf registers as a Readarr app. Categories: audiobook (3030), audio (3000), and books (7020): TorrentLeech has no
+# audiobook category and files audiobooks under Books (ebooks there are rejected by the audio-only quality profile).
+BOOK_CATS = [3030, 3000, 7020]
+cur_app = next((e for e in existing if e['implementation'] == 'Readarr'), None)
+if cur_app and sorted(next(f['value'] for f in cur_app['fields'] if f['name'] == 'syncCategories')) == sorted(BOOK_CATS):
     print('   application Bookshelf (Readarr): present')
+elif cur_app:
+    setf(cur_app['fields'], 'syncCategories', BOOK_CATS)
+    st, r = call(p['url'], p['key'], 'PUT', f'/applications/{cur_app["id"]}', cur_app)
+    print(f'   application Bookshelf: categories {BOOK_CATS} (HTTP {st})' if st in (200, 202) else f'   update FAILED {st}: {r}'); ok &= st in (200, 202)
 else:
     app = next(s for s in schema if s['implementation'] == 'Readarr')
     app.update(name='Bookshelf', syncLevel='fullSync')
     setf(app['fields'], 'prowlarrUrl', f'http://prowlarr.{SVC}:9696')
     setf(app['fields'], 'baseUrl', f'http://bookshelf.{SVC}:{BOOKSHELF["port"]}')
     setf(app['fields'], 'apiKey', BOOKSHELF['key'])
-    setf(app['fields'], 'syncCategories', [3030, 3000])
+    setf(app['fields'], 'syncCategories', BOOK_CATS)
     st, r = call(p['url'], p['key'], 'POST', '/applications/test', app)
     if st not in (200, 202):
         print(f'   application Bookshelf test FAILED {st}: {r}'); ok = False
