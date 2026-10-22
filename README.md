@@ -264,8 +264,8 @@ Test without an outage: `DRY_RUN=1 /usr/local/lib/dagalab/ups-shutdown.sh` on a 
 - [ ] NAS monitoring via SNMP instead of a DSM admin account: enable DSM SNMPv3 (read-only user `snmp-ro`, SHA + AES; passwords in Vault `secret/synology-snmp`), deploy Prometheus snmp-exporter with the Synology module, Grafana NAS dashboard, alerts to Discord #alerts (RAID degraded, disk failing, volume filling, temperature), and a Homepage NAS tile from Prometheus. Then drop the `diskstation` widget, the `homepage-synology` ExternalSecret and the DSM `homepage` admin user (it's an administrator only because DSM's stats API requires one; Homarr's `daga-nas` integration uses it too, so switch that to SNMP-fed data or drop it first)
 - [ ] Optional: stop `media` renaming the DSM-denied folders (remove "Delete subfolders and files" at the `video` root, re-grant per media folder)
 - [ ] BIOS: nodes Wake-on-LAN + restore on AC loss "stay off"; webserver restore on AC loss "power on" (README "UPS / power")
-- [ ] UniFi: DMZ rule 192.168.4.10 → 192.168.3.20 TCP 3493 must match (above the DMZ block); then `scripts/nut-setup.sh 192.168.4.10`
+- [x] UniFi: rule `ups-nut` Allow TCP, source zone Dmz 192.168.4.10 → destination zone Internal 192.168.3.20:3493 (Lab VLAN 3 is in zone Internal, DMZ VLAN 4 in zone Dmz)
 - [ ] Home Assistant: phone notifications on power loss / restore (NUT sensors are in place)
 - [ ] Optional: a real outage test (unplug for > 10 min) once the BIOS settings are done
-- [ ] DSM: add the bastion (192.168.3.100) to the NUT server allow list; then `scripts/nut-setup.sh 192.168.3.100`
-- [ ] DSM Task Scheduler: create the two `ups-wake.py` tasks (README "UPS / power")
+- [x] DSM: add the bastion (192.168.3.100) to the NUT server allow list; then `scripts/nut-setup.sh 192.168.3.100`
+- [x] DSM Task Scheduler: create the two `ups-wake.py` tasks (README "UPS / power")
