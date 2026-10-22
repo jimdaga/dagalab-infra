@@ -4,3 +4,5 @@ Description=dagalab: graceful cluster stop + power off (UPS on battery for 10 mi
 [Service]
 Type=oneshot
 ExecStart=/usr/local/lib/dagalab/ups-shutdown.sh
+# the script bounds its own steps; this is the last resort if something still hangs
+TimeoutStartSec=15min

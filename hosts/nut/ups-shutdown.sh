@@ -16,7 +16,7 @@ if [ "$(hostname)" = dagakube01 ]; then
          || logger -t dagalab-ups "graceful stop failed or timed out (rc $?): powering off anyway"; fi
 else
   if dry; then echo "[dry-run] python3 $LP wait-stopped --local --timeout 480"
-  else python3 "$LP" wait-stopped --local --timeout 480 \
+  else timeout 500 python3 "$LP" wait-stopped --local --timeout 480 \
          || logger -t dagalab-ups "cluster not confirmed stopped: powering off anyway"; fi
 fi
 say "cluster shutdown: powering off $(hostname)"

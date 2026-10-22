@@ -37,7 +37,9 @@ TIMEOUT = 480
 def kubectl_cmd(local):
     if os.environ.get('LAB_POWER_KUBECTL'):
         return os.environ['LAB_POWER_KUBECTL'].split()
-    return ['/var/lib/rancher/rke2/bin/kubectl', '--kubeconfig', '/etc/rancher/rke2/rke2.yaml'] if local else ['kubectl']
+    # on a node during a UPS shutdown the apiserver may accept connections and never answer: bound every call
+    return (['/var/lib/rancher/rke2/bin/kubectl', '--kubeconfig', '/etc/rancher/rke2/rke2.yaml', '--request-timeout=20s']
+            if local else ['kubectl'])
 
 
 def log(msg): print(msg, flush=True)
@@ -175,15 +177,17 @@ def stop_workloads():
     else:
         out = ssh(SNAPSHOT_NODE, f'sudo rke2 etcd-snapshot save --name {name} 2>&1 | tail -1')
         log(f'  {out.strip()}')
-    log('2. pause Argo CD + prometheus-operator')
-    for ns, kind, n in PAUSE:
-        act(f'scale {ns}/{n} to 0', [*kubectl_cmd(LOCAL), '-n', ns, 'scale', kind, n, '--replicas=0'])
-    log('3. record + scale workloads with volumes to 0')
+    # record first: the state file is also the auto-start marker, so it must exist before anything is paused,
+    # or a failure mid-pause would leave Argo at 0 replicas after the reboot with nothing to un-pause it
+    log('2. record the workloads with volumes')
     wl = volume_workloads()
     if not DRY:
         STATE.parent.mkdir(parents=True, exist_ok=True)
         STATE.write_text(json.dumps({'saved': time.strftime('%Y-%m-%dT%H:%M:%S'), 'workloads': wl}, indent=1))
         log(f'  recorded {len(wl)} workloads in {STATE}')
+    log('3. pause Argo CD + prometheus-operator, scale the workloads to 0')
+    for ns, kind, n in PAUSE:
+        act(f'scale {ns}/{n} to 0', [*kubectl_cmd(LOCAL), '-n', ns, 'scale', kind, n, '--replicas=0'])
     for w in wl:
         act(f'scale {w["ns"]}/{w["name"]} ({w["replicas"]} -> 0)',
             [*kubectl_cmd(LOCAL), '-n', w['ns'], 'scale', w['kind'], w['name'], '--replicas=0'])

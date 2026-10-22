@@ -16,7 +16,7 @@ class LabPowerTest(unittest.TestCase):
     def test_kubectl_cmd_local_uses_rke2(self):
         with mock.patch.dict(os.environ, {}, clear=False):
             os.environ.pop('LAB_POWER_KUBECTL', None)
-            self.assertEqual(lp.kubectl_cmd(True), ['/var/lib/rancher/rke2/bin/kubectl', '--kubeconfig', '/etc/rancher/rke2/rke2.yaml'])
+            self.assertEqual(lp.kubectl_cmd(True), ['/var/lib/rancher/rke2/bin/kubectl', '--kubeconfig', '/etc/rancher/rke2/rke2.yaml', '--request-timeout=20s'])
             self.assertEqual(lp.kubectl_cmd(False), ['kubectl'])
         with mock.patch.dict(os.environ, {'LAB_POWER_KUBECTL': 'fake kube'}):
             self.assertEqual(lp.kubectl_cmd(True), ['fake', 'kube'])
@@ -62,6 +62,31 @@ class LabPowerTest(unittest.TestCase):
                 self.assertFalse(lp.STATE.exists())
             finally:
                 lp.DRY, lp.LOCAL = False, False
+
+    def test_marker_written_before_argo_is_paused(self):
+        """I1: if pausing fails, the marker must already exist so the auto-start un-pauses Argo after the reboot."""
+        with tempfile.TemporaryDirectory() as d:
+            lp.DRY, lp.LOCAL, lp.STATE = False, True, pathlib.Path(d) / 's.json'
+            try:
+                with mock.patch.object(lp, 'sh', return_value=''), mock.patch.object(lp, 'act', side_effect=SystemExit('api hiccup')), \
+                     mock.patch.object(lp, 'volume_workloads', return_value=[{'kind': 'deployment', 'ns': 'media', 'name': 'a', 'replicas': 1}]):
+                    with self.assertRaises(SystemExit):
+                        lp.stop_workloads()
+                self.assertTrue(lp.STATE.exists(), 'marker missing although Argo may already be paused')
+                self.assertEqual(json.loads(lp.STATE.read_text())['workloads'][0]['name'], 'a')
+            finally:
+                lp.DRY, lp.LOCAL = False, False
+
+    def test_ups_units_are_time_bounded(self):
+        """I2/I3: every node-side wait is bounded so a hung API can't keep a node up or kill the auto-start midway."""
+        root = HERE.parent.parent / 'hosts/nut'
+        sh_ = (root / 'ups-shutdown.sh').read_text()
+        for call in ('stop-workloads --local --state', 'wait-stopped --local --timeout'):
+            line = next(l for l in sh_.splitlines() if call in l and 'dry-run' not in l and 'echo' not in l)
+            self.assertIn('timeout ', line.split('python3')[0], line)
+        # whole lines: systemd has no inline comments, 'X=1 # note' is rejected and the limit silently dropped
+        self.assertIn('TimeoutStartSec=15min', (root / 'dagalab-ups-shutdown.service').read_text().splitlines())
+        self.assertIn('TimeoutStartSec=7200', (root / 'dagalab-ups-autostart.service').read_text().splitlines())
 
 
 if __name__ == '__main__':
