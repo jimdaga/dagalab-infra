@@ -1,0 +1,2 @@
+# upssched runs as nut: it may start the UPS shutdown service, nothing else
+nut ALL=(root) NOPASSWD: /usr/bin/systemctl start --no-block dagalab-ups-shutdown.service

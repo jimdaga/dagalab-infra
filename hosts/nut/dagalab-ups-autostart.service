@@ -1,0 +1,13 @@
+[Unit]
+Description=dagalab: start the cluster after an automatic UPS shutdown (only if its marker exists)
+After=network-online.target rke2-server.service
+Wants=network-online.target
+ConditionPathExists=/var/lib/dagalab/ups-shutdown.json
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 /usr/local/lib/dagalab/lab-power.py start --local --state /var/lib/dagalab/ups-shutdown.json
+TimeoutStartSec=3600
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,7 @@
+# dagalab: Wake-on-LAN (magic packet) so daga-nas can start the node after a power outage (nas/ups-wake.py).
+# Merged with 90-host-config.yaml (scripts/host-config.sh).
+network:
+  version: 2
+  ethernets:
+    eno1:
+      wakeonlan: true

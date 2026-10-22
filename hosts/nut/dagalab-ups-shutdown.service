@@ -1,0 +1,6 @@
+[Unit]
+Description=dagalab: graceful cluster stop + power off (UPS on battery for 10 min)
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/lib/dagalab/ups-shutdown.sh

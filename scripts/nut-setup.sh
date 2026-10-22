@@ -23,7 +23,32 @@ for h in $HOSTS; do
   c+=$(put "$h" /etc/nut/nut.conf 640 root:nut < hosts/nut/nut.conf)
   c+=$(sed -e "s/__USER__/$NUT_USER/" -e "s/__PASSWORD__/$NUT_PW/" hosts/nut/upsmon.conf.tmpl | put "$h" /etc/nut/upsmon.conf 640 root:nut)
   c+=$(put "$h" /usr/local/sbin/dagalab-upssched 755 root:root < hosts/nut/dagalab-upssched)
-  c+=$(put "$h" /etc/nut/upssched.conf 640 root:nut < hosts/nut/upssched-plain.conf)   # Task 3: nodes get upssched-node.conf
+  case " $NODES " in
+    *" $h "*) c+=$(put "$h" /etc/nut/upssched.conf 640 root:nut < hosts/nut/upssched-node.conf) ;;
+    *)        c+=$(put "$h" /etc/nut/upssched.conf 640 root:nut < hosts/nut/upssched-plain.conf) ;;
+  esac
+  if [[ " $NODES " == *" $h "* ]]; then
+    ssh -o BatchMode=yes "jim@$h" 'sudo mkdir -p /usr/local/lib/dagalab /var/lib/dagalab'
+    c+=$(put "$h" /usr/local/lib/dagalab/lab-power.py 755 root:root < scripts/lab-power.py)
+    c+=$(put "$h" /usr/local/lib/dagalab/ups-shutdown.sh 755 root:root < hosts/nut/ups-shutdown.sh)
+    put "$h" /etc/systemd/system/dagalab-ups-shutdown.service 644 root:root < hosts/nut/dagalab-ups-shutdown.service >/dev/null
+    put "$h" /tmp/dagalab-sudoers 440 root:root < hosts/nut/sudoers-dagalab-ups >/dev/null
+    ssh -o BatchMode=yes "jim@$h" 'sudo visudo -cqf /tmp/dagalab-sudoers && sudo install -m 440 /tmp/dagalab-sudoers /etc/sudoers.d/dagalab-ups; sudo rm -f /tmp/dagalab-sudoers'
+    if [ "$(put "$h" /etc/netplan/91-wakeonlan.yaml 600 root:root < hosts/nut/91-wakeonlan.yaml)" = changed ]; then
+      ssh -o BatchMode=yes "jim@$h" 'sudo netplan generate && sudo netplan apply && sleep 5; sudo ethtool -s eno1 wol g'
+      echo "  wake-on-lan enabled"
+    fi
+    if [ "$h" = 192.168.3.11 ]; then
+      put "$h" /etc/systemd/system/dagalab-ups-autostart.service 644 root:root < hosts/nut/dagalab-ups-autostart.service >/dev/null
+      ssh -o BatchMode=yes "jim@$h" 'sudo systemctl daemon-reload && sudo systemctl enable -q dagalab-ups-autostart.service'
+    else
+      ssh -o BatchMode=yes "jim@$h" 'sudo systemctl daemon-reload'
+    fi
+  fi
   # reset-failed: the package starts nut-monitor with its stock config (no UPS), which fails into systemd's start limit
   ssh -o BatchMode=yes "jim@$h" "sudo systemctl enable -q nut-monitor; sudo systemctl reset-failed nut-monitor; $( [ -n "$c" ] && echo 'sudo systemctl restart nut-monitor' || echo 'sudo systemctl start nut-monitor' ); sleep 2; echo \"  nut-monitor \$(systemctl is-active nut-monitor), ups \$(timeout 8 upsc ups@192.168.3.20 ups.status 2>/dev/null || echo unreachable)\""
 done
+if [ -z "${*:-}" ] || [[ " $* " == *" 192.168.3.20 "* ]]; then
+  ssh -o BatchMode=yes jim@192.168.3.20 'mkdir -p dagalab && cat > dagalab/ups-wake.py && chmod 755 dagalab/ups-wake.py' < nas/ups-wake.py \
+    && echo "== NAS: dagalab/ups-wake.py updated"
+fi
