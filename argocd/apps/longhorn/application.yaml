@@ -6,6 +6,10 @@ metadata:
   namespace: argocd
   finalizers:
     - resources-finalizer.argocd.argoproj.io
+    # Argo CD (v3.5) adds these itself because the Longhorn chart has pre-delete hooks; declared here so the root
+    # app doesn't strip them on every sync while the controller re-adds them (root stuck OutOfSync, seen 2026-10-21)
+    - pre-delete-finalizer.argocd.argoproj.io
+    - pre-delete-finalizer.argocd.argoproj.io/cleanup
   annotations:
     argocd.argoproj.io/sync-wave: "-20"
 spec:
