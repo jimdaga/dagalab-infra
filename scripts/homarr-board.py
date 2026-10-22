@@ -3,10 +3,10 @@
 
 Env: HOMARR_USER/HOMARR_PASSWORD (to read boards and set the header), HOMARR_API_KEY (REST), CA_FILE,
 UNIFI_PASSWORD / SYNOLOGY_PASSWORD (the `homepage` accounts on the UCG and DSM, from Vault secret/homepage-devices),
-HA_TOKEN (Home Assistant long-lived token, Vault secret/home-assistant api-token).
+HA_TOKEN (Home Assistant long-lived token, Vault secret/home-assistant api-token), BOOKSHELF_KEY.
 Four boards, pinned as tabs in the header (centre zone) of HOMARR_USER, each with an icon (shown as the tab) and title:
-  Home      clock, weather, media launchers, now playing, recently added, requests
-  Library   calendar, missing/queued, request stats, subtitles
+  Home      clock, weather, media launchers (incl. Audiobookshelf), now playing, recently added, requests
+  Library   calendar (incl. Bookshelf), missing/queued, request stats, subtitles
   Downloads qBittorrent, VPN, indexers
   Platform  launchers for the platform UIs (incl. Homarr's Kubernetes pages) and Homepage's bookmarks; UniFi and NAS
             widgets (UniFi, NAS and Home Assistant integrations created here, the devices re-using Homepage's `homepage` accounts)
@@ -80,6 +80,9 @@ DEVICES = [  # name, kind, url, secrets (kind, value)
     # long-lived token "dagalab" (scripts/home-assistant-setup.sh); in-cluster, so no lab CA / DNS needed
     ('Home Assistant', 'homeAssistant', 'http://home-assistant.home-assistant.svc.cluster.local:8123',
      [('apiKey', os.environ['HA_TOKEN'])]),
+    # Bookshelf (audiobooks) as Readarr, for the calendar. No Audiobookshelf integration: Homarr's audio stats widget
+    # always calls /api/users/online, which needs an Audiobookshelf admin key; Home has just a launcher tile instead.
+    ('Bookshelf', 'readarr', 'http://bookshelf.media.svc.cluster.local:8787', [('apiKey', os.environ['BOOKSHELF_KEY'])]),
 ]
 REFRESH = {'Home Assistant'}   # token can be rotated by scripts/home-assistant-setup.sh: re-send it every run
 for name, kind, url, secrets in DEVICES:
@@ -125,6 +128,8 @@ WANT_APPS = {  # name: (href, iconUrl, description); existing apps only get thei
     'UniFi': ('https://192.168.3.1', f'{ICONS}/svg/ubiquiti-unifi.svg', 'Cloud Gateway'),
     'daga-nas (DSM)': ('https://192.168.3.20:5001', f'{ICONS}/svg/synology-dsm.svg', 'NAS'),
     'Proton Mail': ('https://mail.proton.me/', f'{ICONS}/svg/proton-mail.svg', None),
+    'Audiobookshelf': ('https://books.lab.internal', f'{ICONS}/svg/audiobookshelf.svg', 'Audiobooks + podcasts'),
+    'Bookshelf': ('https://bookshelf.lab.internal', f'{ICONS}/png/readarr.png', 'Audiobook requests'),
 }
 for name, (href, icon, desc) in WANT_APPS.items():
     a = by_name.get(name)
@@ -154,6 +159,10 @@ def widget(kind, integration=None, **opts):
     return {'kind': kind, 'options': {**(t.get('options') or {}), **OPTIONS.get(kind, {}), **opts},
             'integrationIds': t.get('integrationIds') or [], 'advancedOptions': t.get('advancedOptions') or {}}
 
+def with_integration(item, name):   # add an integration to a widget that already has others (e.g. the calendar)
+    item['integrationIds'] = sorted(set(item['integrationIds']) | {integrations[name]['id']})
+    return item
+
 def launcher(name):
     return {'kind': 'app', 'options': {'appId': by_name[name]['id'], 'showTitle': True, 'pingEnabled': True},
             'integrationIds': [], 'advancedOptions': {}}
@@ -166,10 +175,11 @@ LAYOUT = {
         (widget('clock'), 0, 0, 2, 1), (widget('weather'), 2, 0, 2, 1),
         *launchers(('Jellyfin', 'Seerr', 'Sonarr', 'Radarr', 'Bazarr', 'Prowlarr'), 4, 0),
         (widget('mediaServer'), 0, 1, 4, 3), (widget('mediaReleases'), 4, 1, 3, 3), (widget('mediaRequests-requestList'), 7, 1, 3, 3),
+        *launchers(('Audiobookshelf',), 0, 4),
     ],
     'Library': [
-        *launchers(('Sonarr', 'Radarr', 'Bazarr', 'Seerr', 'Jellyfin'), 0, 0),
-        (widget('calendar'), 0, 1, 4, 4), (widget('mediaMissing'), 4, 1, 4, 4),
+        *launchers(('Sonarr', 'Radarr', 'Bazarr', 'Seerr', 'Jellyfin', 'Bookshelf'), 0, 0),
+        (with_integration(widget('calendar'), 'Bookshelf'), 0, 1, 4, 4), (widget('mediaMissing'), 4, 1, 4, 4),
         (widget('mediaRequests-requestStats'), 8, 0, 2, 3), (widget('bazarr'), 8, 3, 2, 2),
     ],
     'Downloads': [
