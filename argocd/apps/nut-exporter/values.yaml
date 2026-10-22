@@ -45,3 +45,8 @@ serviceMonitor:
         params:
           ups: [ups]
         interval: 30s
+        # the exporter doesn't label its metrics with the UPS name; the dashboard ($ups) and alerts expect ups="ups"
+        relabelings:
+          - targetLabel: ups
+            replacement: ups
+            action: replace
