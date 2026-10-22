@@ -1,0 +1,5 @@
+apiVersion: v2
+name: ups-monitoring
+description: Grafana dashboard and Prometheus rules for the UPS (metrics from nut-exporter)
+type: application
+version: 0.1.0

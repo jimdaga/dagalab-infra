@@ -1,0 +1,50 @@
+groups:
+  - name: ups
+    rules:
+      - record: ups:power_watts
+        expr: network_ups_tools_ups_load * network_ups_tools_ups_realpower_nominal / 100
+      - alert: UPSOnBattery
+        expr: network_ups_tools_ups_status{flag="OB"} == 1
+        for: 1m
+        labels: {severity: warning}
+        annotations:
+          summary: UPS on battery (mains power out)
+          description: The lab runs on the UPS. The k8s cluster stops itself gracefully after 10 minutes on battery.
+      - alert: UPSClusterShutdownSoon
+        expr: network_ups_tools_ups_status{flag="OB"} == 1
+        for: 8m
+        labels: {severity: critical}
+        annotations:
+          summary: On battery for 8 minutes, cluster shutdown in about 2 minutes
+          description: dagakube01 starts the graceful stop at 10 minutes on battery; the NAS wakes the nodes when power is back.
+      - alert: UPSLowBattery
+        expr: network_ups_tools_ups_status{flag="LB"} == 1 or network_ups_tools_battery_charge < 30
+        for: 1m
+        labels: {severity: critical}
+        annotations:
+          summary: UPS battery low ({{ $value }})
+          description: The NAS goes to standby and every NUT client shuts down at low battery.
+      - alert: UPSRuntimeLow
+        expr: network_ups_tools_battery_runtime < 600
+        for: 2m
+        labels: {severity: critical}
+        annotations:
+          summary: UPS runtime under 10 minutes ({{ $value }} s)
+      - alert: UPSHighLoad
+        expr: network_ups_tools_ups_load > 80
+        for: 10m
+        labels: {severity: warning}
+        annotations:
+          summary: UPS load {{ $value }}% (over 80% of 1000 W)
+      - alert: UPSReplaceBattery
+        expr: network_ups_tools_ups_status{flag="RB"} == 1
+        for: 5m
+        labels: {severity: warning}
+        annotations:
+          summary: UPS reports its battery needs replacing
+      - alert: UPSMetricsMissing
+        expr: absent(network_ups_tools_ups_status{flag="OL"})
+        for: 5m
+        labels: {severity: warning}
+        annotations:
+          summary: No UPS metrics (nut-exporter down or the NAS NUT server unreachable)

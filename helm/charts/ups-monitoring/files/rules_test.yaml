@@ -1,0 +1,40 @@
+rule_files: [rules.yaml]
+evaluation_interval: 1m
+tests:
+  - interval: 1m
+    input_series:
+      - series: 'network_ups_tools_ups_load{ups="ups"}'
+        values: '12x20'
+      - series: 'network_ups_tools_ups_realpower_nominal{ups="ups"}'
+        values: '1000x20'
+      - series: 'network_ups_tools_ups_status{ups="ups",flag="OB"}'
+        values: '0 0 1x18'
+      - series: 'network_ups_tools_ups_status{ups="ups",flag="OL"}'
+        values: '1 1 0x18'
+      - series: 'network_ups_tools_battery_charge{ups="ups"}'
+        values: '100x20'
+      - series: 'network_ups_tools_battery_runtime{ups="ups"}'
+        values: '3800x20'
+    promql_expr_test:
+      - expr: ups:power_watts
+        eval_time: 5m
+        exp_samples: [{labels: 'ups:power_watts{ups="ups"}', value: 120}]
+    alert_rule_test:
+      - {eval_time: 2m, alertname: UPSOnBattery, exp_alerts: []}
+      - eval_time: 4m
+        alertname: UPSOnBattery
+        exp_alerts:
+          - exp_labels: {severity: warning, ups: ups, flag: OB}
+            exp_annotations:
+              summary: UPS on battery (mains power out)
+              description: The lab runs on the UPS. The k8s cluster stops itself gracefully after 10 minutes on battery.
+      - {eval_time: 9m, alertname: UPSClusterShutdownSoon, exp_alerts: []}
+      - eval_time: 11m
+        alertname: UPSClusterShutdownSoon
+        exp_alerts:
+          - exp_labels: {severity: critical, ups: ups, flag: OB}
+            exp_annotations:
+              summary: On battery for 8 minutes, cluster shutdown in about 2 minutes
+              description: dagakube01 starts the graceful stop at 10 minutes on battery; the NAS wakes the nodes when power is back.
+      - {eval_time: 15m, alertname: UPSLowBattery, exp_alerts: []}
+      - {eval_time: 15m, alertname: UPSMetricsMissing, exp_alerts: []}

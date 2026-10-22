@@ -1,0 +1,7 @@
+# Rules live in files/rules.yaml, read verbatim, so Helm never parses Prometheus' own label templates.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: ups
+spec:
+{{ .Files.Get "files/rules.yaml" | indent 2 }}

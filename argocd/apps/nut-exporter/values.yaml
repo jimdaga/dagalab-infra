@@ -1,0 +1,47 @@
+# nut-exporter: Prometheus metrics for the UPS on daga-nas (Synology "Network UPS server", 192.168.3.20:3493, UPS
+# "ups", read-only, no login). Pod traffic leaves via the node IPs, which are on the NAS's NUT allow list.
+# Dashboard + alerts: helm/charts/ups-monitoring. Watts = ups.load% x ups.realpower.nominal (1000 W).
+controllers:
+  nut-exporter:
+    containers:
+      app:
+        image:
+          repository: ghcr.io/druggeri/nut_exporter
+          tag: 3.3.0
+        env:
+          NUT_EXPORTER_SERVER: 192.168.3.20
+          NUT_EXPORTER_VARIABLES: battery.charge,battery.runtime,battery.voltage,input.voltage,output.voltage,ups.load,ups.realpower.nominal,ups.status
+        probes:
+          liveness: &probe
+            enabled: true
+            custom: true
+            spec:
+              httpGet:
+                path: /
+                port: 9199
+              periodSeconds: 30
+          readiness: *probe
+        resources:
+          requests:
+            cpu: 10m
+            memory: 16Mi
+          limits:
+            memory: 64Mi
+
+service:
+  app:
+    controller: nut-exporter
+    ports:
+      metrics:
+        port: 9199
+
+serviceMonitor:
+  app:
+    service:
+      identifier: app
+    endpoints:
+      - port: metrics
+        path: /ups_metrics
+        params:
+          ups: [ups]
+        interval: 30s
