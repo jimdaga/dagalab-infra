@@ -1,0 +1,19 @@
+# dagalab: monitor the UPS on daga-nas (Synology "Network UPS server", 192.168.3.20:3493, UPS "ups").
+# Rendered by scripts/nut-setup.sh (login from Vault secret/nut). Low battery / FSD from the NAS -> SHUTDOWNCMD on
+# every client. Nodes also run a graceful cluster stop after 10 min on battery (upssched.conf, hosts/nut/).
+MONITOR ups@192.168.3.20 1 __USER__ __PASSWORD__ secondary
+MINSUPPLIES 1
+SHUTDOWNCMD "/sbin/shutdown -h +0"
+NOTIFYCMD /usr/sbin/upssched
+POLLFREQ 5
+POLLFREQALERT 5
+HOSTSYNC 15
+DEADTIME 25
+FINALDELAY 5
+NOTIFYFLAG ONLINE SYSLOG+EXEC
+NOTIFYFLAG ONBATT SYSLOG+EXEC
+NOTIFYFLAG LOWBATT SYSLOG+EXEC
+NOTIFYFLAG FSD SYSLOG+EXEC
+NOTIFYFLAG COMMOK SYSLOG
+NOTIFYFLAG COMMBAD SYSLOG
+NOTIFYFLAG SHUTDOWN SYSLOG

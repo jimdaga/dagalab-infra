@@ -1,0 +1,7 @@
+#!/bin/sh
+# upssched CMDSCRIPT (runs as user nut). Logs every event. On the nodes' cluster-shutdown timer (10 min on battery)
+# it starts the root service that stops the cluster gracefully and powers the node off (sudo rule: exactly that).
+logger -t dagalab-ups "upssched event: $1"
+case "$1" in
+  cluster-shutdown) sudo -n /usr/bin/systemctl start --no-block dagalab-ups-shutdown.service ;;
+esac
