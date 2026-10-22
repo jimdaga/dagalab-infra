@@ -1,18 +1,21 @@
 #!/usr/bin/env python3
 """Power-cycle the dagalab cluster safely (see ../SKILL.md for when and why).
 
-  lab_power.py precheck                     read-only: nodes, Longhorn, broken pods, Argo apps
-  lab_power.py stop-workloads [--dry-run]   etcd snapshot, pause Argo + prometheus-operator, scale volume workloads
-                                            to 0, wait for every Longhorn volume to detach and every NFS mount to go
-  lab_power.py poweroff [--dry-run]         cordon all nodes, power them off one by one, wait until none answers ping
-  lab_power.py start                        after power-on: wait for nodes + Longhorn CSI, uncordon, un-pause,
-                                            wait for the recorded workloads, clear Jobs that failed during startup
-  lab_power.py verify                       read-only health check after power-up
+  lab-power.py precheck                                  read-only checks
+  lab-power.py stop-workloads [--dry-run] [--local] [--state F]   etcd snapshot, pause Argo + operator, scale storage
+                                                         workloads to 0, wait for Longhorn + NFS to let go
+  lab-power.py wait-stopped --local [--timeout S]        (dagakube02/03, UPS) wait until every Longhorn volume is detached
+  lab-power.py poweroff [--dry-run]                      (Mac only) cordon, power the nodes off, wait for ping to stop
+  lab-power.py start [--dry-run] [--local] [--state F]   NAS NFS, nodes Ready, Longhorn CSI, uncordon, un-pause, wait
+  lab-power.py verify                                    read-only health check
+--local: run on a node as root (RKE2's kubectl + kubeconfig, etcd snapshot locally, no ssh). Used by the UPS
+automation (hosts/nut/). Default state file: ~/.local/state/dagalab/lab-power.json (Mac); the UPS path uses
+/var/lib/dagalab/ups-shutdown.json, which is also the auto-start marker.
 
 State (the workloads that were scaled down) is kept in ~/.local/state/dagalab/lab-power.json so `start` works from a
 new session. Needs kubectl (context dagalab) and passwordless ssh+sudo to jim@192.168.3.11-13.
 """
-import json, os, pathlib, subprocess, sys, time
+import json, os, pathlib, socket, subprocess, sys, time
 
 NODES = {'dagakube01': '192.168.3.11', 'dagakube02': '192.168.3.12', 'dagakube03': '192.168.3.13'}
 POWEROFF_ORDER = ['dagakube03', 'dagakube02', 'dagakube01']   # 01 last: it holds the fresh etcd snapshot
@@ -21,13 +24,20 @@ SKIP_NS = {'kube-system', 'longhorn-system'}
 PAUSE = [('argocd', 'statefulset', 'argocd-application-controller'),          # else selfHeal scales everything back
          ('monitoring', 'deployment', 'kube-prometheus-stack-operator')]      # else it recreates prometheus/alertmanager
 NAS_NFS = ('192.168.3.21', 2049)
-STATE = pathlib.Path.home() / '.local/state/dagalab/lab-power.json'
 ENDPOINTS = ['https://popcorn.dagaflix.com/health', 'https://requests.dagaflix.com/api/v1/status',
              'https://books.dagaflix.com/healthcheck', 'https://jellyfin.lab.internal/health',
              'https://plex.lab.internal/identity', 'https://home.lab.internal/', 'https://homepage.lab.internal/',
              'https://argocd.lab.internal/', 'http://192.168.3.202:32400/identity']
 
-DRY = '--dry-run' in sys.argv
+DRY, LOCAL = False, False
+STATE = pathlib.Path.home() / '.local/state/dagalab/lab-power.json'
+TIMEOUT = 480
+
+
+def kubectl_cmd(local):
+    if os.environ.get('LAB_POWER_KUBECTL'):
+        return os.environ['LAB_POWER_KUBECTL'].split()
+    return ['/var/lib/rancher/rke2/bin/kubectl', '--kubeconfig', '/etc/rancher/rke2/rke2.yaml'] if local else ['kubectl']
 
 
 def log(msg): print(msg, flush=True)
@@ -41,7 +51,7 @@ def sh(args, check=True, capture=True):
 
 
 def kj(*args):
-    return json.loads(sh(['kubectl', *args, '-o', 'json']))
+    return json.loads(sh([*kubectl_cmd(LOCAL), *args, '-o', 'json']))
 
 
 def act(desc, args):
@@ -101,6 +111,29 @@ def nfs_mounts():
     return {n: int(ssh(n, 'mount -t nfs4 | wc -l', check=False).strip() or -1) for n in NODES}
 
 
+def nfs_claim_pods():
+    """Pods that mount a PVC backed by an NFS PV (media-data, audiobooks, podcasts, trickplay)."""
+    nfs_pvs = {p['metadata']['name'] for p in kj('get', 'pv')['items'] if 'nfs' in p['spec']}
+    claims = {(c['metadata']['namespace'], c['metadata']['name']) for c in kj('get', 'pvc', '-A')['items']
+              if c['spec'].get('volumeName') in nfs_pvs}
+    return [f'{p["metadata"]["namespace"]}/{p["metadata"]["name"]}' for p in kj('get', 'pods', '-A')['items']
+            if any((p['metadata']['namespace'], v['persistentVolumeClaim']['claimName']) in claims
+                   for v in p['spec'].get('volumes') or [] if 'persistentVolumeClaim' in v)]
+
+
+def wait_stopped(timeout, every=10):
+    """True once every Longhorn volume is detached; False on timeout or if the API can't be reached."""
+    end = time.time() + timeout
+    while time.time() < end:
+        try:
+            if all(v[1] == 'detached' for v in volumes()):
+                return True
+        except SystemExit:
+            pass
+        time.sleep(every)
+    return False
+
+
 def pingable(ip):
     return subprocess.run(['ping', '-c1', '-t2', ip], capture_output=True).returncode == 0
 
@@ -131,14 +164,20 @@ def precheck():
 def stop_workloads():
     log('1. etcd snapshot')
     name = f'pre-power-{time.strftime("%Y%m%d-%H%M")}'
-    if DRY:
+    if LOCAL:
+        cmd = ['/usr/local/bin/rke2', 'etcd-snapshot', 'save', '--name', name]
+        if DRY:
+            log(f'  [dry-run] {" ".join(cmd)}')
+        else:
+            log('  ' + ((sh(cmd, check=False).strip().splitlines() or [''])[-1]))
+    elif DRY:
         log(f'  [dry-run] ssh {SNAPSHOT_NODE} sudo rke2 etcd-snapshot save --name {name}')
     else:
         out = ssh(SNAPSHOT_NODE, f'sudo rke2 etcd-snapshot save --name {name} 2>&1 | tail -1')
         log(f'  {out.strip()}')
     log('2. pause Argo CD + prometheus-operator')
     for ns, kind, n in PAUSE:
-        act(f'scale {ns}/{n} to 0', ['kubectl', '-n', ns, 'scale', kind, n, '--replicas=0'])
+        act(f'scale {ns}/{n} to 0', [*kubectl_cmd(LOCAL), '-n', ns, 'scale', kind, n, '--replicas=0'])
     log('3. record + scale workloads with volumes to 0')
     wl = volume_workloads()
     if not DRY:
@@ -147,23 +186,28 @@ def stop_workloads():
         log(f'  recorded {len(wl)} workloads in {STATE}')
     for w in wl:
         act(f'scale {w["ns"]}/{w["name"]} ({w["replicas"]} -> 0)',
-            ['kubectl', '-n', w['ns'], 'scale', w['kind'], w['name'], '--replicas=0'])
+            [*kubectl_cmd(LOCAL), '-n', w['ns'], 'scale', w['kind'], w['name'], '--replicas=0'])
     if DRY:
         log(f'  [dry-run] would wait for all {len(volumes())} Longhorn volumes to detach and NFS mounts to reach 0')
         return
     log('4. wait for Longhorn + NFS to let go')
     wait('every Longhorn volume detached',
          lambda: (all(v[1] == 'detached' for v in volumes()), [v[0] for v in volumes() if v[1] != 'detached']), 900)
-    wait('no NFS mounts on any node', lambda: (all(c == 0 for c in nfs_mounts().values()), nfs_mounts()), 300)
+    if LOCAL:
+        wait('no pods using NFS claims', lambda: (not nfs_claim_pods(), nfs_claim_pods()), 300)
+    else:
+        wait('no NFS mounts on any node', lambda: (all(c == 0 for c in nfs_mounts().values()), nfs_mounts()), 300)
     log('STOPPED: safe to run `poweroff` (the NAS is already free)')
 
 
 def poweroff():
+    if LOCAL:
+        raise SystemExit('poweroff is Mac-only; on a node the UPS automation powers itself off')
     if not DRY:
         busy = [v[0] for v in volumes() if v[1] != 'detached']
         if busy:
             raise SystemExit(f'refusing: Longhorn volumes still attached {busy}; run stop-workloads first')
-    act('cordon all nodes', ['kubectl', 'cordon', *NODES])
+    act('cordon all nodes', [*kubectl_cmd(LOCAL), 'cordon', *NODES])
     for n in POWEROFF_ORDER:
         # delayed poweroff so the ssh command returns instead of hanging on the dying connection
         cmd = 'sudo systemd-run --on-active=3 /bin/systemctl poweroff'
@@ -183,8 +227,13 @@ def poweroff():
 
 def start():
     log('0. NAS NFS reachable')
-    wait('NAS NFS port open', lambda: (subprocess.run(['nc', '-z', '-G', '3', *map(str, NAS_NFS)],
-                                                      capture_output=True).returncode == 0, 'closed'), 900)
+    def nfs_open():
+        try:
+            socket.create_connection(NAS_NFS, timeout=3).close()
+            return True, ''
+        except OSError as e:
+            return False, str(e)
+    wait('NAS NFS port open', nfs_open, 1800)
     log('1. nodes Ready (still cordoned)')
 
     def all_ready():
@@ -203,9 +252,9 @@ def start():
         return set(ok) >= set(NODES), sorted(ok)
     wait('longhorn-csi-plugin ready on all nodes', csi_ready, 900)
     log('3. uncordon + un-pause')
-    act('uncordon all nodes', ['kubectl', 'uncordon', *NODES])
+    act('uncordon all nodes', [*kubectl_cmd(LOCAL), 'uncordon', *NODES])
     for ns, kind, n in reversed(PAUSE):
-        act(f'scale {ns}/{n} to 1', ['kubectl', '-n', ns, 'scale', kind, n, '--replicas=1'])
+        act(f'scale {ns}/{n} to 1', [*kubectl_cmd(LOCAL), '-n', ns, 'scale', kind, n, '--replicas=1'])
     if DRY:
         return
     log('4. Argo restores every workload to its git replica count')
@@ -214,7 +263,7 @@ def start():
     def restored():
         waiting = []
         for w in wl:
-            r = subprocess.run(['kubectl', '-n', w['ns'], 'get', w['kind'], w['name'], '-o', 'json'],
+            r = subprocess.run([*kubectl_cmd(LOCAL), '-n', w['ns'], 'get', w['kind'], w['name'], '-o', 'json'],
                                capture_output=True, text=True)
             if r.returncode:
                 waiting.append(w['name']); continue
@@ -228,7 +277,7 @@ def start():
     for j in kj('get', 'jobs', '-A')['items']:
         if j.get('status', {}).get('failed'):
             act(f'delete failed job {j["metadata"]["namespace"]}/{j["metadata"]["name"]}',
-                ['kubectl', '-n', j['metadata']['namespace'], 'delete', 'job', j['metadata']['name']])
+                [*kubectl_cmd(LOCAL), '-n', j['metadata']['namespace'], 'delete', 'job', j['metadata']['name']])
     if STATE.exists():
         STATE.unlink()
     log('STARTED: run `verify`')
@@ -237,7 +286,7 @@ def start():
 def verify():
     bad = precheck()
     for i in range(3):
-        r = subprocess.run(['kubectl', '-n', 'vault', 'exec', f'vault-{i}', '--', 'vault', 'status', '-format=json'],
+        r = subprocess.run([*kubectl_cmd(LOCAL), '-n', 'vault', 'exec', f'vault-{i}', '--', 'vault', 'status', '-format=json'],
                            capture_output=True, text=True)
         sealed = json.loads(r.stdout)['sealed'] if r.stdout.strip().startswith('{') else 'unknown'
         log(f'vault-{i} sealed: {sealed}')
@@ -252,10 +301,10 @@ def verify():
                               capture_output=True, text=True).stdout
         log(f'{code} {u}')
         bad += code != '200'
-    am = sh(['kubectl', '-n', 'monitoring', 'get', 'pods', '-o', 'name'], check=False).split()
+    am = sh([*kubectl_cmd(LOCAL), '-n', 'monitoring', 'get', 'pods', '-o', 'name'], check=False).split()
     am = next((p for p in am if 'alertmanager-kube' in p), None)
     if am:
-        raw = sh(['kubectl', '-n', 'monitoring', 'exec', am, '-c', 'alertmanager', '--', 'wget', '-qO-',
+        raw = sh([*kubectl_cmd(LOCAL), '-n', 'monitoring', 'exec', am, '-c', 'alertmanager', '--', 'wget', '-qO-',
                   'http://localhost:9093/api/v2/alerts?active=true'], check=False)
         firing = [a['labels'].get('alertname') for a in json.loads(raw or '[]')
                   if a['labels'].get('alertname') not in ('Watchdog', 'InfoInhibitor')]
@@ -263,9 +312,23 @@ def verify():
     log('VERIFY ' + ('OK' if not bad else f'FOUND {bad} PROBLEM(S)'))
 
 
+def wait_stopped_cmd():
+    ok = wait_stopped(TIMEOUT)
+    log('STOPPED' if ok else 'TIMEOUT: volumes still attached or API unreachable')
+    sys.exit(0 if ok else 1)
+
+
 if __name__ == '__main__':
-    cmds = {'precheck': precheck, 'stop-workloads': stop_workloads, 'poweroff': poweroff, 'start': start, 'verify': verify}
-    args = [a for a in sys.argv[1:] if not a.startswith('--')]
-    if len(args) != 1 or args[0] not in cmds:
-        raise SystemExit(__doc__)
-    cmds[args[0]]()
+    import argparse
+    p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    p.add_argument('command', choices=['precheck', 'stop-workloads', 'wait-stopped', 'poweroff', 'start', 'verify'])
+    p.add_argument('--dry-run', action='store_true')
+    p.add_argument('--local', action='store_true')
+    p.add_argument('--state', type=pathlib.Path)
+    p.add_argument('--timeout', type=int, default=480)
+    a = p.parse_args()
+    DRY, LOCAL, TIMEOUT = a.dry_run, a.local, a.timeout
+    if a.state:
+        STATE = a.state
+    {'precheck': precheck, 'stop-workloads': stop_workloads, 'wait-stopped': wait_stopped_cmd, 'poweroff': poweroff,
+     'start': start, 'verify': verify}[a.command]()

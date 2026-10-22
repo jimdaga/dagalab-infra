@@ -14,12 +14,12 @@ Draining node by node does not work for a FULL shutdown: pods just pile onto the
 blocked by Longhorn's PodDisruptionBudgets. Instead the script pauses Argo CD and scales workloads to zero, so Argo's git
 state is the single source of truth for bringing them back.
 
-`scripts/lab_power.py` does the mechanical parts. Every mutating step supports `--dry-run`; run it first and show the user
+`scripts/lab-power.py` does the mechanical parts. The same script runs on dagakube01 (`--local`) for the automatic UPS shutdown/start (README "UPS / power"). Every mutating step supports `--dry-run`; run it first and show the user
 what will happen. Run it from the repo root with kubectl context `dagalab`.
 
 ## Power down
 
-1. **Precheck** (read-only): `python3 .claude/skills/lab-power-cycle/scripts/lab_power.py precheck`
+1. **Precheck** (read-only): `python3 scripts/lab-power.py precheck`
    Nodes Ready, no attached Longhorn volume unhealthy, no broken pods, Argo apps listed if not Synced/Healthy. Going down
    with a degraded volume or a broken app makes the power-up harder to judge, so point problems out first.
 2. **Confirm with the user**, then **stop workloads**: `... stop-workloads` (after `--dry-run`)
