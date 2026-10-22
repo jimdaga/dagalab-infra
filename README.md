@@ -215,6 +215,30 @@ Deploy order, so Jellyfin scans an already clean, ID-tagged library once:
    6. UniFi DNS: `books.lab.internal`, `bookshelf.lab.internal` → 192.168.3.201.
    Requesting a book: search it in Bookshelf and add it (only that book is monitored); it appears in Audiobookshelf within the hour.
 
+## UPS / power
+
+CyberPower CP1500PFCRM2U (1000 W) on USB to daga-nas; DSM is the NUT server ("Network UPS server", 192.168.3.20:3493,
+UPS `ups`, allow list: the 3 nodes, the webserver, the bastion; the bastion must be added there) and goes to standby at low battery.
+
+| When | What happens |
+|---|---|
+| On battery 1 min | Alert `UPSOnBattery` (Discord #alerts) |
+| On battery 8 min | Alert `UPSClusterShutdownSoon` |
+| On battery 10 min | Nodes (upssched timer): dagakube01 runs `scripts/lab-power.py stop-workloads --local` (pause Argo + operator, stop storage workloads, wait for Longhorn/NFS), writes `/var/lib/dagalab/ups-shutdown.json`, powers off; dagakube02/03 wait until every Longhorn volume is detached (max 8 min), power off |
+| Low battery / NAS FSD | Every NUT client (nodes, webserver, bastion) shuts down; NAS standby |
+| Power back < 10 min | Timers cancelled, nothing happens |
+| Power back after the shutdown | NAS `ups-wake.py watch` (every minute): after 2 min on mains, Wake-on-LAN to any node that's down; dagakube01's `dagalab-ups-autostart` sees the marker and runs `lab-power.py start --local` (waits for NAS NFS, Longhorn CSI, uncordons, un-pauses Argo) |
+| Battery ran out | NAS boots when power returns; `ups-wake.py boot` waits for NFS, then wakes the nodes (BIOS "stay off" on AC restore = the NAS starts them, after it's fully up) |
+
+Setup: `VAULT_TOKEN=... scripts/nut-setup.sh` (all hosts + the NAS script; login in Vault `secret/nut`); files in
+`hosts/nut/`, `nas/`. DSM Task Scheduler (user `jim`): Triggered task at **Boot-up**
+`/usr/bin/python3 /var/services/homes/jim/dagalab/ups-wake.py boot >> /var/services/homes/jim/dagalab/ups-wake.log 2>&1`;
+Scheduled task daily 00:00-23:59 **every 1 minute** `… ups-wake.py watch >> …/ups-wake.log 2>&1`.
+BIOS: nodes Wake-on-LAN (wake from S5) + restore on AC loss **stay off**; webserver restore on AC loss **power on**.
+Metrics: `nut-exporter` (monitoring) → Grafana "UPS (daga-nas)" (`ups:power_watts` = load% × 1000 W), alert rules in
+`helm/charts/ups-monitoring`, Homepage UPS tile (Network group; Homepage needs a restart after config changes), Home Assistant NUT sensors.
+Test without an outage: `DRY_RUN=1 /usr/local/lib/dagalab/ups-shutdown.sh` on a node; `ups-wake.py watch --dry-run --status "OB"`.
+
 ## TODO
 
 - [ ] kube-vip for an HA API endpoint (192.168.3.10)
@@ -239,3 +263,9 @@ Deploy order, so Jellyfin scans an already clean, ID-tagged library once:
 - [ ] Jellyfin: plugins (Playback Reporting, TMDb Box Sets, Session Cleaner, Chapter Segments Provider, Webhook, File Transformation, Plugin Pages, Home Screen Sections, Media Bar, Jellyfin Enhanced; repos IAmParadox27 + n00bcodr) and Jellyfin Enhanced settings live only in the Longhorn config volume: add them to `scripts/jellyfin-setup.py` so a rebuild restores them
 - [ ] NAS monitoring via SNMP instead of a DSM admin account: enable DSM SNMPv3 (read-only user `snmp-ro`, SHA + AES; passwords in Vault `secret/synology-snmp`), deploy Prometheus snmp-exporter with the Synology module, Grafana NAS dashboard, alerts to Discord #alerts (RAID degraded, disk failing, volume filling, temperature), and a Homepage NAS tile from Prometheus. Then drop the `diskstation` widget, the `homepage-synology` ExternalSecret and the DSM `homepage` admin user (it's an administrator only because DSM's stats API requires one; Homarr's `daga-nas` integration uses it too, so switch that to SNMP-fed data or drop it first)
 - [ ] Optional: stop `media` renaming the DSM-denied folders (remove "Delete subfolders and files" at the `video` root, re-grant per media folder)
+- [ ] BIOS: nodes Wake-on-LAN + restore on AC loss "stay off"; webserver restore on AC loss "power on" (README "UPS / power")
+- [ ] UniFi: DMZ rule 192.168.4.10 → 192.168.3.20 TCP 3493 must match (above the DMZ block); then `scripts/nut-setup.sh 192.168.4.10`
+- [ ] Home Assistant: phone notifications on power loss / restore (NUT sensors are in place)
+- [ ] Optional: a real outage test (unplug for > 10 min) once the BIOS settings are done
+- [ ] DSM: add the bastion (192.168.3.100) to the NUT server allow list; then `scripts/nut-setup.sh 192.168.3.100`
+- [ ] DSM Task Scheduler: create the two `ups-wake.py` tasks (README "UPS / power")

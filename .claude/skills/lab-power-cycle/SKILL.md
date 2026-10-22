@@ -56,6 +56,8 @@ When the user says things are back on:
   next successful run: Argo judges CronJob health by last schedule vs last success, so deleting the failed Job isn't
   enough. `root` mirrors it as Degraded. Both clear on their own.
 - Volumes that are `detached`/`unknown` and not used by any app are normal.
+- If the lab went down by itself (UPS), dagakube01 starts it again automatically when
+  `/var/lib/dagalab/ups-shutdown.json` exists; check `journalctl -u dagalab-ups-autostart` before running `start` by hand.
 
 ## If something goes wrong
 
