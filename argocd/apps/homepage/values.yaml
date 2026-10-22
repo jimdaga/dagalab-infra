@@ -372,6 +372,27 @@ configMaps:
 
       bookmarks.yaml: |
         - Infrastructure:
+            - UPS:
+                icon: mdi-power-plug-battery
+                description: CyberPower CP1500 on daga-nas
+                href: https://grafana.lab.internal/d/dagalab-ups
+                widget:
+                  type: prometheusmetric
+                  url: http://kube-prometheus-stack-prometheus.monitoring.svc.cluster.local:9090
+                  refreshInterval: 30000
+                  metrics:
+                    - label: Power
+                      query: ups:power_watts
+                      format: {type: number, suffix: " W", options: {maximumFractionDigits: 0}}
+                    - label: Charge
+                      query: network_ups_tools_battery_charge
+                      format: {type: number, suffix: "%"}
+                    - label: Runtime
+                      query: network_ups_tools_battery_runtime / 60
+                      format: {type: number, suffix: " min", options: {maximumFractionDigits: 0}}
+                    - label: On battery
+                      query: network_ups_tools_ups_status{flag="OB"}
+                      format: {type: number}
             - dagalab-infra:
                 - icon: github.png
                   href: https://github.com/jimdaga/dagalab-infra

@@ -205,6 +205,9 @@ FLOWS = {
     'jellyfin': {'url': f'http://jellyfin.{SVC}:8096', 'username': JF_USER, 'password': JF_PW},
     'sonarr': {'url': f'http://sonarr.{SVC}:8989', 'api_key': os.environ['SONARR_KEY'], 'verify_ssl': False},
     'radarr': {'url': f'http://radarr.{SVC}:7878', 'api_key': os.environ['RADARR_KEY'], 'verify_ssl': False},
+    # UPS sensors (charge, load, runtime, status) from daga-nas's NUT server; read-only, no login (HA's hostNetwork
+    # pod connects from a node IP, which is on the NAS's NUT allow list). Phone notifications: later (README TODO).
+    'nut': {'host': '192.168.3.20', 'port': 3493},
 }
 def fill(schema, values):
     """Form input from `values` by field name: strings where the form wants one (e.g. DSM's port), and nested dicts
