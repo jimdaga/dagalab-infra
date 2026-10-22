@@ -369,9 +369,6 @@ configMaps:
                   username: homepage   # DSM only serves these stats to administrators
                   password: "{{ "{{HOMEPAGE_VAR_SYNOLOGY_PASSWORD}}" }}"
                   volume: volume_2     # the media share
-
-      bookmarks.yaml: |
-        - Infrastructure:
             - UPS:
                 icon: mdi-power-plug-battery
                 description: CyberPower CP1500 on daga-nas
@@ -393,6 +390,9 @@ configMaps:
                     - label: On battery
                       query: network_ups_tools_ups_status{flag="OB"}
                       format: {type: number}
+
+      bookmarks.yaml: |
+        - Infrastructure:
             - dagalab-infra:
                 - icon: github.png
                   href: https://github.com/jimdaga/dagalab-infra
