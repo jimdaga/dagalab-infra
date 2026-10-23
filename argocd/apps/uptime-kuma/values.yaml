@@ -1,0 +1,37 @@
+# Uptime Kuma: uptime monitors + notifications, https://uptime.lab.internal (LAN only).
+# Monitors, notifications and status pages live in its SQLite DB (/app/data on Longhorn), edited in the UI, not in git.
+# First visit creates the admin account.
+controllers:
+  uptime-kuma:
+    strategy: Recreate
+    containers:
+      app:
+        image:
+          repository: louislam/uptime-kuma
+          tag: 2.5.6-slim   # slim: no embedded MariaDB / Chromium (SQLite only, no "real browser" monitors)
+        env:
+          TZ: America/New_York
+          # skip the first-run database picker: SQLite on the Longhorn volume
+          UPTIME_KUMA_DB_TYPE: sqlite
+        resources:
+          requests:
+            cpu: 50m
+            memory: 128Mi
+          limits:
+            memory: 512Mi
+
+service:
+  app:
+    controller: uptime-kuma
+    ports:
+      http:
+        port: 3001
+
+persistence:
+  # SQLite DB: Longhorn, never NFS
+  data:
+    type: persistentVolumeClaim
+    accessMode: ReadWriteOnce
+    size: 2Gi
+    globalMounts:
+      - path: /app/data

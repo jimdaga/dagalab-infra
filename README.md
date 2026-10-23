@@ -96,6 +96,7 @@ Two zones, two owners:
 | -15 | lab-ca | Homelab root CA + `lab-internal-ca` ClusterIssuer (cert-manager) for `*.lab.internal` |
 | 0 | homepage | LAN dashboard (gethomepage.dev), *arr widgets via Vault API keys |
 | 0 | homarr | Trial alternative dashboard (homarr.dev), compared against Homepage; config lives in its DB |
+| 0 | uptime-kuma | Uptime monitors + notifications; config lives in its SQLite DB on Longhorn |
 | 5 | lan-gateway | LAN-only Envoy Gateway on 192.168.3.201: HTTPS `*.lab.internal` routes to the admin/media UIs; owns the cluster GatewayClass |
 | 5 | shared-gateway | Public Gateway (WAN 443), `dagaflix.com` wildcard cert, Jellyfin + Seerr routes |
 
@@ -124,6 +125,7 @@ ingress-nginx was retired in March 2026, and Gateway API is where things are hea
 | `sonarr.lab.internal` / `radarr.lab.internal` / `prowlarr.lab.internal` | *arr apps |
 | `argocd.lab.internal` | Argo CD |
 | `grafana.lab.internal` | Grafana |
+| `uptime.lab.internal` | Uptime Kuma: monitors, notifications and status pages live in its SQLite DB on Longhorn, **not** in git; first visit creates the admin account |
 | `longhorn.lab.internal` | Longhorn UI (no auth of its own) |
 | `vault.lab.internal` | Vault UI |
 
@@ -253,6 +255,7 @@ Test without an outage: `DRY_RUN=1 /usr/local/lib/dagalab/ups-shutdown.sh` on a 
 - [ ] UniFi DNS: `bazarr.lab.internal` → 192.168.3.201
 - [ ] Dashboard trial: keep Homepage or Homarr, then remove the other (Argo app, lan-gateway route, UniFi record, Vault `secret/homarr` if Homarr goes; Homarr reuses Homepage's Jellyfin key)
 - [ ] UniFi DNS: `homarr.lab.internal` → 192.168.3.201
+- [ ] UniFi DNS: `uptime.lab.internal` → 192.168.3.201
 - [x] UniFi DNS: `books.lab.internal`, `bookshelf.lab.internal` → 192.168.3.201
 - [x] UniFi DNS: `home.lab.internal` → 192.168.3.201
 - [ ] Home Assistant: review Settings → Devices & services → Discovered (main-LAN devices) and add the ones wanted

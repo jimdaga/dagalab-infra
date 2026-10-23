@@ -304,6 +304,13 @@ configMaps:
                 namespace: monitoring
                 app: grafana
                 siteMonitor: http://kube-prometheus-stack-grafana.monitoring.svc.cluster.local/api/health
+            - Uptime Kuma:
+                href: https://uptime.lab.internal
+                icon: uptime-kuma.png
+                description: Uptime monitors
+                namespace: uptime-kuma
+                app: uptime-kuma
+                siteMonitor: http://uptime-kuma.uptime-kuma.svc.cluster.local:3001
             - Media pipeline:
                 href: https://grafana.lab.internal/d/dagalab-media-pipeline
                 icon: mdi-pipe
