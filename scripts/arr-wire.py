@@ -29,8 +29,11 @@ TRACKERS = {
 # no global stop (torrents without a per-tracker goal seed indefinitely). Stop (not remove) at a goal so the *arr apps clean up.
 # Stalled downloads must keep counting toward the 3: private trackers cap concurrent downloads per account
 # (TorrentLeech answers "torrents limit reached"), so starting every queued torrent at once gets them all refused.
+# Global rate caps (bytes/s) leave room on the 1 Gbps FIOS line for the house and Plex/Jellyfin streams: unlimited
+# downloads peaked ~82 MB/s (2026-10) and squeezed the TV; seeding never passed ~12 MB/s, so the upload cap is headroom.
 QBT_PREFS = dict(queueing_enabled=True, max_active_downloads=3, max_active_uploads=-1, max_active_torrents=-1,
-                 dont_count_slow_torrents=False, max_ratio_enabled=False, max_seeding_time_enabled=False, max_ratio_act=0)
+                 dont_count_slow_torrents=False, max_ratio_enabled=False, max_seeding_time_enabled=False, max_ratio_act=0,
+                 dl_limit=50 * 1024**2, up_limit=40 * 1024**2)
 
 def call(base, key, method, path, body=None):
     req = urllib.request.Request(base + path, method=method, headers={'X-Api-Key': key, 'Content-Type': 'application/json'},
@@ -315,9 +318,9 @@ print(f'== qbittorrent {qbt("/app/version")}')
 prefs = qbt('/app/preferences')
 if any(prefs.get(n) != v for n, v in QBT_PREFS.items()):
     qbt('/app/setPreferences', {'json': json.dumps(QBT_PREFS)})
-    print('   preferences (unlimited seeding, 3 downloads): updated')
+    print('   preferences (unlimited seeding, 3 downloads, 50/40 MiB/s caps): updated')
 else:
-    print('   preferences (unlimited seeding, 3 downloads): already set')
+    print('   preferences (unlimited seeding, 3 downloads, 50/40 MiB/s caps): already set')
 # audiobooks category (created by Bookshelf's download client): explicit save path like movies/tv; the hourly
 # seed-cleanup CronJob (argocd/apps/bookshelf) only deletes torrents under exactly this path
 cats = qbt('/torrents/categories')
