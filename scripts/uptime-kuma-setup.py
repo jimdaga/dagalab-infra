@@ -5,9 +5,11 @@ Env: UK_USER, UK_PASSWORD (Vault secret/uptimekuma), DISCORD_ALERTS (webhook, Va
 
 Monitors come from the repo, so a new route is monitored on the next run:
   LAN apps       every route in helm/charts/lan-gateway/values.yaml   -> https://<host>.lab.internal<monitorPath or />
-  Public         every route in helm/charts/shared-gateway/values.yaml -> https://<host>.dagaflix.com/ (+ cert expiry)
+  Public         every route in helm/charts/shared-gateway/values.yaml -> https://<host>.dagaflix.com/ (+ cert expiry),
+                 plus PUBLIC_EXTRA; all through the vpn-proxy (own PIA tunnel), so they test the way in from the internet
   Infrastructure EXTRA below: anything not behind a gateway (hosts, LoadBalancer services, ports)
 A route takes `monitor: false` to skip it. Every monitor alerts Discord #alerts; groups don't (they'd repeat the child).
+Status pages (one per Homepage tile): lab = everything, public, infra.
 """
 import json, os, pathlib, sys, yaml
 
@@ -29,9 +31,17 @@ monitors = {}
 domain, lan = routes('lan-gateway')
 for r in lan:   # lab CA: devices trust it, Node doesn't; cert-manager renews the wildcard cert
     monitors[f'{r["host"]}.{domain}'] = dict(http(f'https://{r["host"]}.{domain}{r.get("monitorPath", "/")}', ignoreTls=True), group='LAN apps')
+# Public: out through PIA and back in over the WAN (from the LAN they'd hairpin at the UCG and never leave the house).
+# The proxy resolves names itself, inside the tunnel: public DNS, not the UCG's split answers.
 domain, public = routes('shared-gateway')
-for r in public:   # checked from inside the LAN (UCG hairpin on WAN 443): proves route, cert and DDNS record, not the ISP path
-    monitors[f'{r["host"]}.{domain}'] = dict(http(f'https://{r["host"]}.{domain}{r.get("monitorPath", "/")}', expiryNotification=True), group='Public')
+for r in public:
+    monitors[f'{r["host"]}.{domain}'] = dict(http(f'https://{r["host"]}.{domain}{r.get("monitorPath", "/")}', expiryNotification=True),
+                                             group='Public', viaProxy=True)
+PUBLIC_EXTRA = {
+    'Plex (WAN :32400)': http('http://dagaflix.com:32400/identity'),   # UCG forwards WAN 32400 to 192.168.3.202
+}
+for name, m in PUBLIC_EXTRA.items():
+    monitors[name] = dict(m, group='Public', viaProxy=True)
 
 EXTRA = {
     'dagakube01': ping('192.168.3.11'),
@@ -42,8 +52,10 @@ EXTRA = {
     'daga-nas DSM': http('https://192.168.3.20:5001/', ignoreTls=True),
     'daga-nas NFS': port('192.168.3.21', 2049),          # port 2: every media/audio PV mounts through it
     'UniFi gateway': http('https://192.168.3.1/', ignoreTls=True),
-    'Plex (LoadBalancer)': http('http://192.168.3.202:32400/identity'),   # direct, not via Envoy; WAN :32400 has no hairpin
+    'Plex (LoadBalancer)': http('http://192.168.3.202:32400/identity'),   # direct, not via Envoy; WAN side under Public
     'Internet': ping('1.1.1.1'),
+    # the tunnel itself: when this is down, the Public monitors are failing because of the VPN, not the services
+    'VPN proxy (PIA)': dict(http('https://www.cloudflare.com/cdn-cgi/trace'), viaProxy=True),
 }
 for name, m in EXTRA.items():
     monitors[name] = dict(m, group='Infrastructure')
@@ -55,6 +67,11 @@ json.dump(dict(
     # default notification: monitors added by hand in the UI get it too
     notification=dict(name='Discord #alerts', type='discord', discordWebhookUrl=os.environ['DISCORD_ALERTS'],
                       discordUsername='Uptime Kuma', isDefault=True, active=True),
-    # read by Homepage's uptimekuma widget; LAN only, like the rest of the UI
-    statusPage=dict(slug='lab', title='dagalab'),
+    proxy=dict(protocol='http', host='vpn-proxy.uptime-kuma.svc.cluster.local', port=8888, auth=False, active=True, default=False),
+    # one per Homepage uptimekuma tile (a widget shows one page's totals); LAN only, like the rest of the UI
+    statusPages=[
+        dict(slug='lab', title='dagalab', groups=['LAN apps', 'Public', 'Infrastructure']),
+        dict(slug='public', title='dagaflix.com from the internet', groups=['Public']),
+        dict(slug='infra', title='Lab infrastructure', groups=['Infrastructure']),
+    ],
 ), sys.stdout)

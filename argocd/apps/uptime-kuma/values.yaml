@@ -1,6 +1,6 @@
 # Uptime Kuma: uptime monitors + notifications, https://uptime.lab.internal (LAN only).
-# Monitors, notifications and status pages live in its SQLite DB (/app/data on Longhorn), edited in the UI, not in git.
-# First visit creates the admin account.
+# Monitors, notifications and status pages live in its SQLite DB (/app/data on Longhorn), edited in the UI, not in git;
+# the git-managed ones are kept by scripts/uptime-kuma-setup.sh.
 controllers:
   uptime-kuma:
     strategy: Recreate
@@ -20,12 +20,86 @@ controllers:
           limits:
             memory: 512Mi
 
+  # Gluetun HTTP proxy on its own PIA tunnel (not qBittorrent's): the public monitors go out through it and come back in
+  # over the WAN like a visitor would. Checked from the LAN they'd hairpin at the UCG and never leave the house.
+  # Kill switch as in qbittorrent: with the tunnel down nothing is proxied, so those monitors fail (with "VPN proxy").
+  vpn-proxy:
+    strategy: Recreate
+    pod:
+      dnsPolicy: None   # resolve through Gluetun inside the tunnel: public answers, not the LAN's split DNS
+      dnsConfig:
+        nameservers:
+          - 127.0.0.1
+    containers:
+      app:
+        image:
+          repository: qmcgaw/gluetun
+          tag: v3.41.3
+        env:
+          VPN_SERVICE_PROVIDER: private internet access
+          VPN_TYPE: openvpn
+          # near the lab's users (Massachusetts); Gluetun picks among these, so one region down isn't an outage
+          SERVER_REGIONS: US Massachusetts,US Rhode Island,US New Hampshire,US Connecticut
+          HTTPPROXY: "on"
+          HTTPPROXY_LISTENING_ADDRESS: ":8888"
+          # Service traffic: proxy (8888) and Gluetun's control server (8000, API key; Homepage's VPN widget).
+          # The NetworkPolicy below limits who may connect.
+          FIREWALL_INPUT_PORTS: "8888,8000"
+          TZ: America/New_York
+        envFrom:
+          - secretRef:
+              name: pia   # OPENVPN_USER / OPENVPN_PASSWORD, from secret-stores
+          - secretRef:
+              name: gluetun-control   # HTTP_CONTROL_SERVER_AUTH_DEFAULT_ROLE (API key from Vault secret/gluetun)
+        securityContext:
+          capabilities:
+            add:
+              - NET_ADMIN
+        resources:
+          requests:
+            cpu: 20m
+            memory: 64Mi
+          limits:
+            memory: 256Mi
+
 service:
   app:
     controller: uptime-kuma
+    forceRename: uptime-kuma   # keep the plain name (lan-gateway route, Homepage) now that there are two services
     ports:
       http:
         port: 3001
+  vpn-proxy:
+    controller: vpn-proxy
+    forceRename: vpn-proxy
+    ports:
+      http:
+        port: 8888
+      control:
+        port: 8000
+
+# The proxy is an open way out through PIA: only Uptime Kuma may use it; Homepage may read the control server
+networkpolicies:
+  vpn-proxy:
+    controller: vpn-proxy
+    policyTypes:
+      - Ingress
+    rules:
+      ingress:
+        - from:
+            - podSelector:
+                matchLabels:
+                  app.kubernetes.io/controller: uptime-kuma
+          ports:
+            - protocol: TCP
+              port: 8888
+        - from:
+            - namespaceSelector:
+                matchLabels:
+                  kubernetes.io/metadata.name: homepage
+          ports:
+            - protocol: TCP
+              port: 8000
 
 persistence:
   # SQLite DB: Longhorn, never NFS
@@ -33,5 +107,14 @@ persistence:
     type: persistentVolumeClaim
     accessMode: ReadWriteOnce
     size: 2Gi
-    globalMounts:
-      - path: /app/data
+    advancedMounts:
+      uptime-kuma:
+        app:
+          - path: /app/data
+  tun:
+    type: hostPath
+    hostPath: /dev/net/tun
+    advancedMounts:
+      vpn-proxy:
+        app:
+          - path: /dev/net/tun

@@ -2,7 +2,8 @@
 // Runs inside the uptime-kuma pod (its node + socket.io-client); copied in and run by scripts/uptime-kuma-setup.sh.
 //   node uptime-kuma-apply.js <desired.json> [--dry-run]
 // Owns only what carries the desired tag: creates/updates those monitors and groups, deletes tagged ones no longer
-// wanted, keeps the Discord notification and the status page in step. Never prints the password or webhook.
+// wanted, keeps the Discord notification, the vpn-proxy entry and the status pages in step. Never prints the password
+// or webhook.
 const fs = require("fs");
 const { io } = require("/app/node_modules/socket.io-client");
 
@@ -24,8 +25,9 @@ const next = (ev) => new Promise((resolve) => s.once(ev, resolve));
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 const log = (...a) => console.log(...a);
 
-let notifications = [];
+let notifications = [], proxies = [];
 s.on("notificationList", (d) => { notifications = d; });
+s.on("proxyList", (d) => { proxies = d; });
 async function monitorList() {
     const p = next("monitorList");
     await must("getMonitorList");
@@ -57,6 +59,18 @@ async function main() {
         if (r) notifID = r.id;
     }
     const notificationIDList = notifID ? { [notifID]: true } : {};
+
+    // the vpn-proxy, matched on host + port (monitors flagged viaProxy use it)
+    const p = want.proxy;
+    const curP = proxies.find((x) => x.host === p.host && x.port === p.port);
+    let proxyID = curP?.id ?? null;
+    const bit = (v) => (typeof v === "boolean" ? Number(v) : v);   // SQLite hands booleans back as 0/1
+    if (curP && Object.keys(p).every((k) => bit(curP[k]) === bit(p[k]))) {
+        log(`proxy ${p.host}:${p.port}: ok`);
+    } else {
+        const r = await act(`${curP ? "update" : "add"} proxy ${p.host}:${p.port}`, () => must("addProxy", p, proxyID));
+        if (r) proxyID = r.id;
+    }
 
     // ownership tag
     let tag = (await must("getTags")).tags.find((t) => t.name === want.tag);
@@ -91,8 +105,9 @@ async function main() {
     list = await monitorList();
     const monitorID = {};
     for (const [name, m] of Object.entries(want.monitors)) {
-        const { group, ...fields } = m;
-        monitorID[name] = await ensure(list, name, { ...fields, parent: groupID[group] ?? null, notificationIDList });
+        const { group, viaProxy, ...fields } = m;
+        monitorID[name] = await ensure(list, name,
+            { ...fields, parent: groupID[group] ?? null, proxyId: viaProxy ? proxyID : null, notificationIDList });
     }
 
     // prune: tagged monitors this run doesn't want (children before their groups)
@@ -101,19 +116,20 @@ async function main() {
     const stale = list.filter((m) => owned(m) && !wanted.has(m.name)).sort((a, b) => (a.type === "group") - (b.type === "group"));
     for (const m of stale) await act(`delete monitor ${m.name}`, () => must("deleteMonitor", m.id, false));
 
-    // status page: one public group per monitor group, in the order above
-    const sp = want.statusPage;
-    const res = await fetch(`${BASE_URL}/api/status-page/${sp.slug}`);
-    const cur = res.ok ? await res.json() : null;
-    if (!cur) await act(`add status page /status/${sp.slug}`, () => must("addStatusPage", sp.title, sp.slug));
-    const groups = want.groups.map((g) => ({
-        name: g,
-        monitorList: Object.entries(want.monitors).filter(([, m]) => m.group === g).map(([name]) => ({ id: monitorID[name] })),
-    }));
+    // status pages: one public group per monitor group they show, in the order above
     const shape = (gs) => gs.map((g) => [g.name, g.monitorList.map((m) => m.id)]);
-    if (cur && cur.config.title === sp.title && same(shape(cur.publicGroupList), shape(groups))) {
-        log(`status page /status/${sp.slug}: ok`);
-    } else {
+    for (const sp of want.statusPages) {
+        const res = await fetch(`${BASE_URL}/api/status-page/${sp.slug}`);
+        const cur = res.ok ? await res.json() : null;
+        if (!cur) await act(`add status page /status/${sp.slug}`, () => must("addStatusPage", sp.title, sp.slug));
+        const groups = sp.groups.map((g) => ({
+            name: g,
+            monitorList: Object.entries(want.monitors).filter(([, m]) => m.group === g).map(([name]) => ({ id: monitorID[name] })),
+        }));
+        if (cur && cur.config.title === sp.title && same(shape(cur.publicGroupList), shape(groups))) {
+            log(`status page /status/${sp.slug}: ok`);
+            continue;
+        }
         await act(`save status page /status/${sp.slug}`, async () => {
             const { config } = await must("getStatusPage", sp.slug);
             return must("saveStatusPage", sp.slug, { ...config, title: sp.title, domainNameList: config.domainNameList ?? [] },

@@ -400,6 +400,33 @@ configMaps:
                     - label: On battery
                       query: network_ups_tools_ups_status{flag="OB"}
                       format: {type: number}
+            # Uptime Kuma status pages kept by scripts/uptime-kuma-setup.sh (one widget = one page's totals)
+            - Public reachability:
+                href: https://uptime.lab.internal/status/public
+                icon: mdi-earth
+                description: dagaflix.com + Plex, checked from the internet via PIA
+                widget:
+                  type: uptimekuma
+                  url: http://uptime-kuma.uptime-kuma.svc.cluster.local:3001
+                  slug: public
+            - Lab infrastructure:
+                href: https://uptime.lab.internal/status/infra
+                icon: mdi-server-network
+                description: Nodes, NAS, UCG, Kubernetes API, internet
+                widget:
+                  type: uptimekuma
+                  url: http://uptime-kuma.uptime-kuma.svc.cluster.local:3001
+                  slug: infra
+            - Monitoring VPN:
+                href: https://uptime.lab.internal/status/public
+                icon: gluetun.png
+                description: PIA tunnel the public checks leave through
+                widget:
+                  type: gluetun
+                  url: http://vpn-proxy.uptime-kuma.svc.cluster.local:8000
+                  key: "{{ "{{HOMEPAGE_VAR_GLUETUN_KEY}}" }}"   # same control-server key as qBittorrent's Gluetun
+                  version: 2
+                  fields: [public_ip, region, country]
 
       bookmarks.yaml: |
         - Infrastructure:

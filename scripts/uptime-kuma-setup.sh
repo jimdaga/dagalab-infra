@@ -9,7 +9,7 @@ key() { kubectl -n "$1" get secret "$2" -o jsonpath="{.data.$3}" | base64 -d; }
 export UK_USER=$(key uptime-kuma uptime-kuma user) UK_PASSWORD=$(key uptime-kuma uptime-kuma password) \
   DISCORD_ALERTS=$(key media discord webhook-alerts)
 
-pod=${UK_POD:-$(kubectl -n uptime-kuma get pod -l app.kubernetes.io/name=uptime-kuma -o jsonpath='{.items[0].metadata.name}')}
+pod=${UK_POD:-$(kubectl -n uptime-kuma get pod -l app.kubernetes.io/name=uptime-kuma,app.kubernetes.io/controller=uptime-kuma -o jsonpath='{.items[0].metadata.name}')}
 tmp=$(mktemp -d)
 # the desired state holds the password and webhook: remove both copies however the run ends
 trap 'rm -rf "$tmp"; kubectl -n uptime-kuma exec "$pod" -- rm -f /tmp/uk-apply.js /tmp/uk-desired.json' EXIT
