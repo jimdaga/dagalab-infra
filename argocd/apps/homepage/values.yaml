@@ -310,7 +310,10 @@ configMaps:
                 description: Uptime monitors
                 namespace: uptime-kuma
                 app: uptime-kuma
-                siteMonitor: http://uptime-kuma.uptime-kuma.svc.cluster.local:3001
+                widget:
+                  type: uptimekuma
+                  url: http://uptime-kuma.uptime-kuma.svc.cluster.local:3001
+                  slug: lab   # status page kept by scripts/uptime-kuma-setup.sh
             - Media pipeline:
                 href: https://grafana.lab.internal/d/dagalab-media-pipeline
                 icon: mdi-pipe

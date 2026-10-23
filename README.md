@@ -125,7 +125,7 @@ ingress-nginx was retired in March 2026, and Gateway API is where things are hea
 | `sonarr.lab.internal` / `radarr.lab.internal` / `prowlarr.lab.internal` | *arr apps |
 | `argocd.lab.internal` | Argo CD |
 | `grafana.lab.internal` | Grafana |
-| `uptime.lab.internal` | Uptime Kuma: monitors, notifications and status pages live in its SQLite DB on Longhorn, **not** in git; first visit creates the admin account |
+| `uptime.lab.internal` | Uptime Kuma: up/down monitors for every gateway route (LAN apps, public dagaflix.com hosts with cert expiry) plus nodes, bastion, NAS (DSM, NFS), UCG, Kubernetes API, Plex's LoadBalancer and the internet; alerts to Discord #alerts; status page `/status/lab` feeds the Homepage tile. Kept by `scripts/uptime-kuma-setup.sh` (re-run after adding a route or an `EXTRA` entry in `scripts/uptime-kuma-setup.py`; `--dry-run` shows the changes). It runs in the cluster, so it can't report a whole-lab outage, and the public checks go through the UCG's hairpin, not the internet |
 | `longhorn.lab.internal` | Longhorn UI (no auth of its own) |
 | `vault.lab.internal` | Vault UI |
 
