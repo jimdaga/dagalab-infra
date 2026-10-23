@@ -39,6 +39,9 @@ for r in public:
                                              group='Public', viaProxy=True)
 PUBLIC_EXTRA = {
     'Plex (WAN :32400)': http('http://dagaflix.com:32400/identity'),   # UCG forwards WAN 32400 to 192.168.3.202
+    # pick'em on the old kubeadm box (not this cluster), behind Cloudflare's proxy. Cloudflare challenges the home IP
+    # (403 "Just a moment...") but lets the PIA exit through, so this check only works via the proxy.
+    'family-pickem.com': http('https://family-pickem.com/healthz/', expiryNotification=True),
 }
 for name, m in PUBLIC_EXTRA.items():
     monitors[name] = dict(m, group='Public', viaProxy=True)
