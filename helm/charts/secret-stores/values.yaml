@@ -163,6 +163,10 @@ externalSecrets:
       - secretKey: HOMEPAGE_VAR_AUDIOBOOKSHELF_KEY
         key: audiobookshelf
         property: homepage-key
+  # Uptime Kuma admin login + API key (written by hand into Vault secret/uptimekuma); read by scripts/uptime-kuma-setup.sh
+  - name: uptime-kuma
+    namespace: uptime-kuma
+    extract: uptimekuma
   # Prometheus scrapes Home Assistant's /api/prometheus with the same long-lived token
   - name: home-assistant-prometheus
     namespace: home-assistant
