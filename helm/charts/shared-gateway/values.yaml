@@ -22,8 +22,10 @@ certificate:
 # install or lost config volume), so the public route 404s every spelling Express would route to it (case-insensitive,
 # optional /audiobookshelf base path, extra slashes); scripts/audiobookshelf-setup.sh inits over a port-forward.
 # denyPathRegex (optional): RE2 regex of paths answered 404 by Envoy instead of the backend.
+# requestTimeout (optional): whole-response limit, Envoy's default is 15s. "0s" = none, for direct-play video: one ranged
+# GET carries the whole file and a cut-off one stops playback once the client's buffer runs dry (stream idle timeout still applies).
 routes:
-  - { name: jellyfin,       host: popcorn,  namespace: media, service: jellyfin,       port: 8096 }
+  - { name: jellyfin,       host: popcorn,  namespace: media, service: jellyfin,       port: 8096, requestTimeout: 0s }
   - { name: seerr,          host: requests, namespace: media, service: seerr,          port: 5055 }
   - { name: audiobookshelf, host: books,    namespace: media, service: audiobookshelf, port: 80,
       denyPathRegex: '(?i)^(/+audiobookshelf)?/+init/*$' }

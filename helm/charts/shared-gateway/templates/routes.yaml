@@ -51,4 +51,8 @@ spec:
       backendRefs:
         - name: {{ $r.service }}
           port: {{ $r.port }}
+      {{- with $r.requestTimeout }}
+      timeouts:
+        request: {{ . | quote }}
+      {{- end }}
 {{- end }}

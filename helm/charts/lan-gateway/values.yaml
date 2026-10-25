@@ -23,7 +23,8 @@ routes:
   # httpPaths: plain http only for these prefixes. /local/ = HA's static files (doorbell chime fetched by Sonos).
   - { host: home,     namespace: home-assistant,  service: home-assistant,                port: 8123, httpPaths: [/local/] }
   # http: true also serves plain http://<host> (no redirect): TV apps can't install the homelab CA.
-  - { host: jellyfin, namespace: media,           service: jellyfin,                      port: 8096, http: true }
+  # requestTimeout: whole-response limit (Envoy default 15s); "0s" = none, for direct-play video (see shared-gateway values).
+  - { host: jellyfin, namespace: media,           service: jellyfin,                      port: 8096, http: true, requestTimeout: 0s }
   - { host: plex,     namespace: media,           service: plex,                          port: 32400, monitorPath: /identity }   # / is 401 without a token
   - { host: seerr,    namespace: media,           service: seerr,                         port: 5055 }
   - { host: books,    namespace: media,           service: audiobookshelf,                port: 80 }

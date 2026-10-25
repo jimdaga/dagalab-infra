@@ -28,6 +28,10 @@ spec:
       backendRefs:
         - name: {{ .service }}
           port: {{ .port }}
+      {{- with .requestTimeout }}
+      timeouts:
+        request: {{ . | quote }}
+      {{- end }}
     {{- with .pathPrefix }}
     # anything outside the app's path (e.g. the bare host typed in a browser) -> its web UI
     - matches:
