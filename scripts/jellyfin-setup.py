@@ -13,7 +13,8 @@ USER, PW = os.environ['JF_USER'], os.environ['JF_PASSWORD']
 EMIT = '--emit-keys' in sys.argv
 ROTATE = [a.split('=', 1)[1] for a in sys.argv if a.startswith('--rotate=')]   # e.g. --rotate=homepage
 AUTH = 'MediaBrowser Client="dagalab-setup", Device="cli", DeviceId="dagalab-setup", Version="1.0"'
-LIBS = [('Movies', 'movies', '/data/movies'), ('Shows', 'tvshows', '/data/tv'), ('Home Videos', 'homevideos', '/data/theme-parks')]
+LIBS = [('Movies', 'movies', '/data/movies'), ('Shows', 'tvshows', '/data/tv'), ('Home Videos', 'homevideos', '/data/theme-parks'),
+        ('Sports', 'tvshows', '/data/sports')]   # games from scripts/sports-dl.py, metadata only from its .nfo files
 KEY_APPS = ['homepage', 'seerr', 'arr']   # arr: Sonarr/Radarr tell Jellyfin to refresh after imports
 
 def log(*a): print(*a, file=sys.stderr, flush=True)
@@ -108,12 +109,16 @@ for name, ctype, path in LIBS:
 # no NFO files written into media folders
 LIB_OPTS = {'EnableTrickplayImageExtraction': True, 'ExtractTrickplayImagesDuringLibraryScan': True,
             'SaveTrickplayWithMedia': False, 'MetadataSavers': []}
+# Sports: no TVDB/TMDB lookups ("NFL Classic Games" would match some other show); the .nfo + -thumb.jpg are the metadata
+SPORTS_OPTS = {'TypeOptions': [{'Type': t, 'MetadataFetchers': [], 'MetadataFetcherOrder': [], 'ImageFetchers': [],
+                                'ImageFetcherOrder': [], 'ImageOptions': []} for t in ('Series', 'Season', 'Episode')]}
 st, folders = call('GET', '/Library/VirtualFolders', token=T)
 for f in folders:
-    if f['Name'] not in ('Movies', 'Shows'): continue
+    if f['Name'] not in ('Movies', 'Shows', 'Sports'): continue
     o = f['LibraryOptions']
-    if any(o.get(k) != v for k, v in LIB_OPTS.items()):
-        st, r = call('POST', '/Library/VirtualFolders/LibraryOptions', {'Id': f['ItemId'], 'LibraryOptions': {**o, **LIB_OPTS}}, token=T)
+    want = {**LIB_OPTS, **(SPORTS_OPTS if f['Name'] == 'Sports' else {})}
+    if any(o.get(k) != v for k, v in want.items()):
+        st, r = call('POST', '/Library/VirtualFolders/LibraryOptions', {'Id': f['ItemId'], 'LibraryOptions': {**o, **want}}, token=T)
         log(f'library {f["Name"]}: trickplay on, no NFO: {st} {r if st >= 300 else ""}')
     else:
         log(f'library {f["Name"]}: options already set')

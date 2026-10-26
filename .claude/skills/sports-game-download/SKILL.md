@@ -47,6 +47,7 @@ YouTube id, and copying. You decide the metadata.
 
 - Files written over SMB get the share's DSM permissions, so the `media` user (UID 1029) that Jellyfin/ErsatzTV
   run as can read them. No chown needed.
-- Jellyfin only shows the games if a library points at `/data/sports`. That's a choice for the user; don't add one unasked.
+- Jellyfin has a **Sports** library on `/data/sports` (from `scripts/jellyfin-setup.py`, no online metadata). Its own scan
+  runs every 12 hours (no inotify on NFS), so after a download refresh it: Dashboard > Libraries > Sports > Scan, or rerun `jellyfin-setup.sh`.
 - When ErsatzTV is deployed: mount `media-data` read-only and add a local **Shows** library on `/data/sports`.
 - Personal use only: download what the user asks for, and don't re-share it.
