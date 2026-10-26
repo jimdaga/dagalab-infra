@@ -16,7 +16,9 @@ Downloads go to a local staging dir first (merging over SMB is slow), then copy 
 import argparse, glob, os, re, shutil, subprocess, sys, tempfile
 from xml.sax.saxutils import escape
 
-FORMAT = 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best'   # H.264/AAC MP4: ErsatzTV can stream it without a transcode
+# H.264/AAC MP4 so ErsatzTV/Jellyfin can stream it without a transcode. [ext=mp4] alone isn't enough: YouTube's best
+# MP4 stream is often VP9 (Super Bowl LI came down as format 616, VP9). H.264 tops out at 1080p, plenty for broadcasts.
+FORMAT = 'bestvideo[vcodec^=avc1]+bestaudio[ext=m4a]/bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best'
 
 def safe(name):
     return re.sub(r'\s+', ' ', re.sub(r'[\\/:*?"<>|]', ' -', name)).strip(' .')
