@@ -111,7 +111,8 @@ LIB_OPTS = {'EnableTrickplayImageExtraction': True, 'ExtractTrickplayImagesDurin
             'SaveTrickplayWithMedia': False, 'MetadataSavers': []}
 # Sports: no TVDB/TMDB lookups ("NFL Classic Games" would match some other show); the .nfo + -thumb.jpg are the metadata
 SPORTS_OPTS = {'TypeOptions': [{'Type': t, 'MetadataFetchers': [], 'MetadataFetcherOrder': [], 'ImageFetchers': [],
-                                'ImageFetcherOrder': [], 'ImageOptions': []} for t in ('Series', 'Season', 'Episode')]}
+                                'ImageFetcherOrder': [], 'ImageOptions': [], 'SimilarItemProviders': [],
+                                'SimilarItemProviderOrder': []} for t in ('Series', 'Season', 'Episode')]}   # as Jellyfin stores them
 st, folders = call('GET', '/Library/VirtualFolders', token=T)
 for f in folders:
     if f['Name'] not in ('Movies', 'Shows', 'Sports'): continue
