@@ -14,7 +14,8 @@ EMIT = '--emit-keys' in sys.argv
 ROTATE = [a.split('=', 1)[1] for a in sys.argv if a.startswith('--rotate=')]   # e.g. --rotate=homepage
 AUTH = 'MediaBrowser Client="dagalab-setup", Device="cli", DeviceId="dagalab-setup", Version="1.0"'
 LIBS = [('Movies', 'movies', '/data/movies'), ('Shows', 'tvshows', '/data/tv'), ('Theme Parks', 'homevideos', '/data/theme-parks'),
-        ('Sports', 'tvshows', '/data/sports')]   # games from scripts/sports-dl.py, metadata only from its .nfo files
+        ('Sports', 'tvshows', '/data/sports'),   # games from scripts/sports-dl.py, metadata only from its .nfo files
+        ('Theme Park Audio', 'music', '/data/theme-park-audio')]   # park background music albums
 KEY_APPS = ['homepage', 'seerr', 'arr']   # arr: Sonarr/Radarr tell Jellyfin to refresh after imports
 
 def log(*a): print(*a, file=sys.stderr, flush=True)
