@@ -54,7 +54,7 @@ if any(jf.get(k) != v for k, v in body.items()):
 else:
     log('jellyfin settings: already set')
 
-# 3) libraries: sync the list from Jellyfin, enable Movies + Shows (not Home Videos), start a full sync
+# 3) libraries: sync the list from Jellyfin, enable Movies + Shows (not Theme Parks or Sports), start a full sync
 st, r = call('POST', '/settings/jellyfin/library/sync')
 st, libs = call('GET', '/settings/jellyfin/library')
 if st != 200 or not isinstance(libs, list):
