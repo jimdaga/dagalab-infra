@@ -1,0 +1,21 @@
+# Glance light tiles (https://glance.lab.internal, helm/charts/glance/assets/dagalab.js): a tap POSTs
+# entity_id=light.<room> (form-encoded) to this webhook, which toggles that light. LAN only (local_only), lights only.
+# local_only can't stop a random web page in a LAN browser from POSTing here, so the webhook ID is secret (this repo is
+# public): `glance-` + a hash of the HA API token, rendered into /config/packages/secrets.yaml by the
+# `home-assistant-glance` ExternalSecret and into Glance's env by `glance-ha-webhook` (helm/charts/secret-stores).
+automation:
+  - id: dagalab_glance_light_toggle
+    alias: Glance light toggle
+    mode: parallel
+    max: 20
+    triggers:
+      - trigger: webhook
+        webhook_id: !secret glance_light_webhook
+        allowed_methods: [POST]
+        local_only: true
+    conditions:
+      - "{{ trigger.data.entity_id is defined and trigger.data.entity_id is match('light\\.[a-z0-9_]+$') }}"
+    actions:
+      - action: light.toggle
+        target:
+          entity_id: "{{ trigger.data.entity_id }}"

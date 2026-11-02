@@ -164,9 +164,17 @@ persistence:
           - { path: /seed/make-chime.py, subPath: make-chime.py, readOnly: true }
   # helm/charts/home-assistant-packages: automation packages (doorbell, movie mode), raw files so HA's {{ }}
   # templates aren't rendered by Helm. After a change: Developer tools -> YAML -> reload Automations.
+  # Plus secrets.yaml (`home-assistant-glance` ExternalSecret) for the Glance webhook ID. Not optional: without it HA
+  # would fail the package's !secret, so the pod waits for the Secret instead.
   packages:
-    type: configMap
-    name: home-assistant-packages
+    type: custom
+    volumeSpec:
+      projected:
+        sources:
+          - configMap:
+              name: home-assistant-packages
+          - secret:
+              name: home-assistant-glance
     advancedMounts:
       home-assistant:
         app:

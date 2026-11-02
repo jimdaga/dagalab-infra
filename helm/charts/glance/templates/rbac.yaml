@@ -1,0 +1,38 @@
+# The Argo CD widget lists Applications through the Kubernetes API. Glance reads ${K8S_TOKEN} once at config load, so it
+# gets a non-expiring token from a service-account-token Secret (the projected token rotates); read-only, one resource.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: glance
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: glance-k8s
+  annotations:
+    kubernetes.io/service-account.name: glance
+type: kubernetes.io/service-account-token
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: glance-argocd-apps
+  namespace: argocd
+rules:
+  - apiGroups: [argoproj.io]
+    resources: [applications]
+    verbs: [get, list]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: glance-argocd-apps
+  namespace: argocd
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: glance-argocd-apps
+subjects:
+  - kind: ServiceAccount
+    name: glance
+    namespace: {{ .Release.Namespace }}

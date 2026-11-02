@@ -1,0 +1,5 @@
+apiVersion: v2
+name: glance
+description: Glance (glanceapp/glance), the phone-first dashboard at https://glance.lab.internal; config and assets as raw files
+type: application
+version: 0.1.0

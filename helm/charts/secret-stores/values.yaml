@@ -109,12 +109,51 @@ externalSecrets:
       - secretKey: BAZARR_API_KEY   # set by scripts/bazarr-setup.sh; read by the Exportarr sidecar
         key: bazarr
         property: api-key
-  - name: homarr
-    namespace: homarr
+  # Glance widgets (helm/charts/glance): read-only use of the same keys as Homepage. Glance won't load its config while
+  # any of these is missing, so HA_TOKEN / AUDIOBOOKSHELF_KEY need scripts/home-assistant-setup.sh and
+  # scripts/audiobookshelf-setup.sh to have run.
+  - name: glance
+    namespace: glance
     data:
-      - secretKey: SECRET_ENCRYPTION_KEY   # 64 hex chars; encrypts integration secrets in Homarr's DB. Never rotate (DB unreadable)
-        key: homarr
-        property: encryption-key
+      - secretKey: SONARR_KEY
+        key: sonarr
+        property: api-key
+      - secretKey: RADARR_KEY
+        key: radarr
+        property: api-key
+      - secretKey: JELLYFIN_KEY   # Jellyfin API key "homepage" (scripts/jellyfin-setup.sh)
+        key: jellyfin
+        property: homepage-key
+      - secretKey: SEERR_KEY
+        key: seerr
+        property: api-key
+      - secretKey: GLUETUN_KEY   # qBittorrent's Gluetun control server (VPN line on Media)
+        key: gluetun
+        property: api-key
+      - secretKey: HA_TOKEN   # long-lived token "dagalab"
+        key: home-assistant
+        property: api-token
+      - secretKey: AUDIOBOOKSHELF_KEY   # read-only `homepage` user
+        key: audiobookshelf
+        property: homepage-key
+  # Secret webhook ID for Glance's light tiles, derived from the HA token so both sides agree without another Vault key
+  # (changes when the token is rotated). Same template in both namespaces: keep them identical.
+  - name: glance-ha-webhook
+    namespace: glance
+    data:
+      - secretKey: token
+        key: home-assistant
+        property: api-token
+    template:
+      HA_LIGHT_WEBHOOK: 'glance-{{ .token | sha256sum | trunc 32 }}'
+  - name: home-assistant-glance
+    namespace: home-assistant
+    data:
+      - secretKey: token
+        key: home-assistant
+        property: api-token
+    template:   # mounted next to the packages as /config/packages/secrets.yaml (HA's include_dir skips that name)
+      secrets.yaml: 'glance_light_webhook: glance-{{ .token | sha256sum | trunc 32 }}'
   - name: jellyfin-arr
     namespace: media
     data:

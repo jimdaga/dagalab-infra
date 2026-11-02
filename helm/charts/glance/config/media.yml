@@ -1,0 +1,234 @@
+# Media: what's playing, what's coming this week, what just landed, requests and downloads.
+# Posters come from each app over https://<app>.lab.internal (Sonarr/Radarr MediaCover, Jellyfin images), TMDB for Seerr.
+- name: Media
+  columns:
+    - size: full
+      widgets:
+        - type: custom-api
+          title: Watching now
+          title-url: https://jellyfin.lab.internal/web/#/dashboard
+          cache: 30s
+          url: http://jellyfin.media.svc.cluster.local:8096/Sessions?activeWithinSeconds=600
+          headers: &jellyfin
+            Authorization: MediaBrowser Token="${JELLYFIN_KEY}"
+          template: |
+            {{ $playing := .JSON.Array "#(NowPlayingItem)#" }}
+            {{ if $playing }}
+              <ul class="list list-gap-14">
+              {{ range $playing }}
+                <li class="dl-now">
+                  <img class="dl-thumb" loading="lazy" alt="" src="https://jellyfin.lab.internal/Items/{{ if .Exists "NowPlayingItem.SeriesId" }}{{ .String "NowPlayingItem.SeriesId" }}{{ else }}{{ .String "NowPlayingItem.Id" }}{{ end }}/Images/Primary?fillHeight=144&quality=85">
+                  <div class="min-width-0 grow">
+                    <div class="color-highlight text-truncate">{{ with .String "NowPlayingItem.SeriesName" }}{{ . }} · {{ end }}{{ .String "NowPlayingItem.Name" }}</div>
+                    <div class="color-subdue size-h6 text-truncate">{{ .String "UserName" }} on {{ .String "DeviceName" }} · {{ if .Bool "PlayState.IsPaused" }}paused{{ else }}{{ if .Exists "TranscodingInfo" }}transcoding{{ else }}direct play{{ end }}{{ end }}</div>
+                    {{ $len := .Float "NowPlayingItem.RunTimeTicks" }}
+                    {{ if gt $len 0.0 }}<div class="dl-meter margin-top-5"><span style="width: {{ printf "%.0f" (mul (div (.Float "PlayState.PositionTicks") $len) 100) }}%"></span></div>{{ end }}
+                  </div>
+                </li>
+              {{ end }}
+              </ul>
+            {{ else }}
+              <div class="dl-summary">Nobody's watching right now</div>
+            {{ end }}
+
+        - type: custom-api
+          title: This week
+          title-url: https://sonarr.lab.internal/calendar
+          css-class: dl-schedule
+          cache: 30m
+          template: |
+            {{ $start := now | formatTime "2006-01-02" }}
+            {{ $end := offsetNow "168h" | formatTime "2006-01-02" }}
+            {{ $tv := newRequest "http://sonarr.media.svc.cluster.local:8989/api/v3/calendar"
+                | withParameter "start" $start | withParameter "end" $end | withParameter "includeSeries" "true"
+                | withHeader "X-Api-Key" "${SONARR_KEY}" | getResponse }}
+            {{ $mv := newRequest "http://radarr.media.svc.cluster.local:7878/api/v3/calendar"
+                | withParameter "start" $start | withParameter "end" $end
+                | withHeader "X-Api-Key" "${RADARR_KEY}" | getResponse }}
+            {{ $any := false }}
+            {{ range $i := 7 }}
+              {{ $t := offsetNow (printf "%dh" (mul $i 24)) }}
+              {{ $d := $t | formatTime "2006-01-02" }}
+              {{ $eps := $tv.JSON.Array (printf "#(airDate==\"%s\")#" $d) }}
+              {{ $digital := $mv.JSON.Array (printf "#(digitalRelease%%\"%s*\")#" $d) }}
+              {{ $physical := $mv.JSON.Array (printf "#(physicalRelease%%\"%s*\")#" $d) }}
+              {{ if or $eps $digital $physical }}{{ $any = true }}
+                <div class="dl-day">
+                  <div class="dl-day-label">{{ if eq $i 0 }}Today{{ else if eq $i 1 }}Tomorrow{{ else }}{{ $t | formatTime "Mon Jan 2" }}{{ end }}</div>
+                  <ul class="dl-day-items">
+                  {{ range $eps }}
+                    <li>
+                      <img class="dl-thumb" loading="lazy" alt="" src="https://sonarr.lab.internal/MediaCover/{{ .Int "seriesId" }}/poster-250.jpg">
+                      <div class="min-width-0">
+                        <a class="color-highlight text-truncate block" href="https://sonarr.lab.internal/series/{{ .String "series.titleSlug" }}">{{ .String "series.title" }}</a>
+                        <div class="color-subdue size-h6">S{{ printf "%02d" (.Int "seasonNumber") }}E{{ printf "%02d" (.Int "episodeNumber") }} · {{ (.String "airDateUtc" | parseTime "rfc3339").Local.Format "3:04 PM" }}{{ if .Bool "hasFile" }} · <span class="color-positive">ready</span>{{ end }}</div>
+                      </div>
+                    </li>
+                  {{ end }}
+                  {{ range $digital }}
+                    <li>
+                      <img class="dl-thumb" loading="lazy" alt="" src="https://radarr.lab.internal/MediaCover/{{ .Int "id" }}/poster-250.jpg">
+                      <div class="min-width-0">
+                        <a class="color-highlight text-truncate block" href="https://radarr.lab.internal/movie/{{ .Int "tmdbId" }}">{{ .String "title" }}</a>
+                        <div class="color-subdue size-h6">digital release{{ if .Bool "hasFile" }} · <span class="color-positive">ready</span>{{ end }} <span class="dl-pill info">movie</span></div>
+                      </div>
+                    </li>
+                  {{ end }}
+                  {{ range $physical }}
+                    <li>
+                      <img class="dl-thumb" loading="lazy" alt="" src="https://radarr.lab.internal/MediaCover/{{ .Int "id" }}/poster-250.jpg">
+                      <div class="min-width-0">
+                        <a class="color-highlight text-truncate block" href="https://radarr.lab.internal/movie/{{ .Int "tmdbId" }}">{{ .String "title" }}</a>
+                        <div class="color-subdue size-h6">disc release{{ if .Bool "hasFile" }} · <span class="color-positive">ready</span>{{ end }} <span class="dl-pill info">movie</span></div>
+                      </div>
+                    </li>
+                  {{ end }}
+                  </ul>
+                </div>
+              {{ end }}
+            {{ end }}
+            {{ if not $any }}<div class="dl-summary">Nothing scheduled this week</div>{{ end }}
+
+        - type: custom-api
+          title: New on Jellyfin
+          title-url: https://jellyfin.lab.internal/
+          cache: 10m
+          # Jellyfin's own "Latest" (what its home screen shows): episodes grouped into their series. It needs a user, so
+          # look up jim first; the grouping repeats a series per season, hence unique.
+          url: http://jellyfin.media.svc.cluster.local:8096/Users
+          headers: *jellyfin
+          template: |
+            {{ $user := .JSON.String "#(Name==\"jim\").Id" }}
+            {{ $latest := newRequest (printf "http://jellyfin.media.svc.cluster.local:8096/Users/%s/Items/Latest" $user)
+                | withParameter "Limit" "200" | withParameter "IncludeItemTypes" "Movie,Episode" | withParameter "GroupItems" "true"
+                | withParameter "Fields" "DateCreated"
+                | withHeader "Authorization" "MediaBrowser Token=\"${JELLYFIN_KEY}\"" | getResponse }}
+            <div class="dl-rail">
+            {{ range $i, $item := unique "Id" ($latest.JSON.Array "#(Type!=\"Episode\")#") }}{{ if lt $i 16 }}
+              <a class="dl-poster" href="https://jellyfin.lab.internal/web/#/details?id={{ .String "Id" }}">
+                <img loading="lazy" alt="" src="https://jellyfin.lab.internal/Items/{{ .String "Id" }}/Images/Primary?fillHeight=330&quality=85">
+                <span class="dl-poster-tag">{{ if eq (.String "Type") "Series" }}TV{{ else }}Movie{{ end }}</span>
+                <span class="dl-poster-title text-truncate">{{ .String "Name" }}</span>
+                <span class="dl-poster-sub">added <span {{ .String "DateCreated" | parseTime "rfc3339" | toRelativeTime }}></span> ago</span>
+              </a>
+            {{ end }}{{ end }}
+            </div>
+
+        - type: custom-api
+          title: Requests
+          title-url: https://seerr.lab.internal/requests
+          cache: 5m
+          url: http://seerr.media.svc.cluster.local:5055/api/v1/request?take=8&sort=added&filter=all
+          headers:
+            X-Api-Key: ${SEERR_KEY}
+          template: |
+            <ul class="list list-gap-10 collapsible-container" data-collapse-after="5">
+            {{ range .JSON.Array "results" }}
+              {{ $kind := .String "type" }}
+              {{ $info := newRequest (printf "http://seerr.media.svc.cluster.local:5055/api/v1/%s/%d" $kind (.Int "media.tmdbId")) | withHeader "X-Api-Key" "${SEERR_KEY}" | getResponse }}
+              {{ $ms := .Int "media.status" }}
+              <li class="dl-row">
+                <div class="flex items-center gap-10 min-width-0">
+                  <img class="dl-thumb dl-thumb-sm" loading="lazy" alt="" src="https://image.tmdb.org/t/p/w92{{ $info.JSON.String "posterPath" }}">
+                  <div class="min-width-0">
+                    <a class="color-highlight text-truncate block" href="https://seerr.lab.internal/{{ $kind }}/{{ .Int "media.tmdbId" }}">{{ if eq $kind "movie" }}{{ $info.JSON.String "title" }}{{ else }}{{ $info.JSON.String "name" }}{{ end }}</a>
+                    <div class="color-subdue size-h6">{{ .String "requestedBy.displayName" }} · <span {{ .String "createdAt" | parseTime "rfc3339" | toRelativeTime }}></span> ago</div>
+                  </div>
+                </div>
+                {{ if eq (.Int "status") 1 }}<span class="dl-pill warn">pending</span>
+                {{ else if eq (.Int "status") 3 }}<span class="dl-pill bad">declined</span>
+                {{ else if eq $ms 5 }}<span class="dl-pill ok">available</span>
+                {{ else if eq $ms 4 }}<span class="dl-pill ok">partial</span>
+                {{ else }}<span class="dl-pill info">processing</span>{{ end }}
+              </li>
+            {{ end }}
+            </ul>
+
+    - size: small
+      widgets:
+        - type: custom-api
+          title: Downloads
+          title-url: https://torrent.lab.internal/
+          cache: 30s
+          url: http://qbittorrent.media.svc.cluster.local:8080/api/v2/transfer/info
+          subrequests:
+            active:
+              url: http://qbittorrent.media.svc.cluster.local:8080/api/v2/torrents/info?filter=downloading&sort=progress&reverse=true
+            vpn:
+              url: http://qbittorrent.media.svc.cluster.local:8000/v1/publicip/ip
+              headers: &gluetun
+                X-API-Key: ${GLUETUN_KEY}
+            port:
+              url: http://qbittorrent.media.svc.cluster.local:8000/v1/portforward
+              headers: *gluetun
+          template: |
+            <div class="dl-stats">
+              <div class="dl-stat"><div class="dl-stat-value">{{ printf "%.1f" (div (.JSON.Float "dl_info_speed") 1048576) }}<small> MB/s</small></div><div class="dl-stat-label">↓ down</div></div>
+              <div class="dl-stat"><div class="dl-stat-value">{{ printf "%.1f" (div (.JSON.Float "up_info_speed") 1048576) }}<small> MB/s</small></div><div class="dl-stat-label">↑ up</div></div>
+            </div>
+            {{ $active := (.Subrequest "active").JSON.Array "" }}
+            {{ if $active }}
+              <ul class="list list-gap-10 margin-top-15 collapsible-container" data-collapse-after="4">
+              {{ range $active }}
+                <li>
+                  <div class="text-truncate size-h6 color-highlight">{{ .String "name" }}</div>
+                  <div class="dl-meter margin-top-5"><span style="width: {{ printf "%.0f" (mul (.Float "progress") 100) }}%"></span></div>
+                  <div class="color-subdue size-h6 margin-top-3">{{ printf "%.0f" (mul (.Float "progress") 100) }}% · {{ .String "category" }}{{ if eq (.String "state") "stalledDL" }} · <span class="color-negative">stalled</span>{{ end }}</div>
+                </li>
+              {{ end }}
+              </ul>
+            {{ else }}
+              <div class="dl-summary margin-top-10">Nothing downloading</div>
+            {{ end }}
+            {{ $vpn := .Subrequest "vpn" }}
+            <div class="dl-vpn margin-top-15">
+              {{ if eq $vpn.Response.StatusCode 200 }}
+                <span class="dl-dot ok"></span> VPN {{ $vpn.JSON.String "country" }} · port {{ (.Subrequest "port").JSON.Int "port" }}
+              {{ else }}
+                <span class="dl-dot bad"></span> <span class="color-negative">VPN status unavailable</span>
+              {{ end }}
+            </div>
+
+        - type: custom-api
+          title: Library
+          title-url: https://jellyfin.lab.internal/
+          cache: 30m
+          url: http://jellyfin.media.svc.cluster.local:8096/Items/Counts
+          headers: *jellyfin
+          subrequests:
+            free:
+              url: http://kube-prometheus-stack-prometheus.monitoring.svc.cluster.local:9090/api/v1/query?query=min(sonarr_rootfolder_freespace_bytes)
+            subs:
+              url: http://kube-prometheus-stack-prometheus.monitoring.svc.cluster.local:9090/api/v1/query?query=sum(bazarr_subtitles_missing_total)
+          template: |
+            <div class="dl-stats dl-stats-3">
+              <div class="dl-stat"><div class="dl-stat-value">{{ .JSON.Int "MovieCount" | formatNumber }}</div><div class="dl-stat-label">movies</div></div>
+              <div class="dl-stat"><div class="dl-stat-value">{{ .JSON.Int "SeriesCount" | formatNumber }}</div><div class="dl-stat-label">shows</div></div>
+              <div class="dl-stat"><div class="dl-stat-value">{{ .JSON.Int "EpisodeCount" | formatApproxNumber }}</div><div class="dl-stat-label">episodes</div></div>
+            </div>
+            <div class="color-subdue size-h6 margin-top-10">
+              {{ printf "%.1f" (div ((.Subrequest "free").JSON.Float "data.result.0.value.1") 1099511627776) }} TB free on the NAS ·
+              <a href="https://bazarr.lab.internal/">{{ (.Subrequest "subs").JSON.Int "data.result.0.value.1" }} missing subtitles</a>
+            </div>
+
+        - type: custom-api
+          title: Audiobooks
+          title-url: https://books.lab.internal/
+          cache: 30m
+          url: http://audiobookshelf.media.svc.cluster.local/api/libraries
+          headers: &abs
+            Authorization: Bearer ${AUDIOBOOKSHELF_KEY}
+          template: |
+            {{ $lib := .JSON.String "libraries.#(mediaType==\"book\").id" }}
+            {{ $items := newRequest (printf "http://audiobookshelf.media.svc.cluster.local/api/libraries/%s/items" $lib)
+                | withParameter "sort" "addedAt" | withParameter "desc" "1" | withParameter "limit" "5" | withParameter "minified" "1"
+                | withHeader "Authorization" "Bearer ${AUDIOBOOKSHELF_KEY}" | getResponse }}
+            <div class="color-subdue size-h6">{{ $items.JSON.Int "total" }} books · recently added</div>
+            <ul class="list list-gap-10 margin-top-10">
+            {{ range $items.JSON.Array "results" }}
+              <li>
+                <a class="color-highlight text-truncate block" href="https://books.lab.internal/item/{{ .String "id" }}">{{ .String "media.metadata.title" }}</a>
+                <div class="color-subdue size-h6 text-truncate">{{ .String "media.metadata.authorName" }}</div>
+              </li>
+            {{ end }}
+            </ul>

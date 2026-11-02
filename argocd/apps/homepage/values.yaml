@@ -440,9 +440,9 @@ configMaps:
             - dagalab-infra:
                 - icon: github.png
                   href: https://github.com/jimdaga/dagalab-infra
-            - Homarr (trial):
-                - icon: homarr.png
-                  href: https://homarr.lab.internal
+            - Glance (phone dashboard):
+                - icon: glance.png
+                  href: https://glance.lab.internal
         - Personal:
             - Proton Mail:
                 - icon: proton-mail.png

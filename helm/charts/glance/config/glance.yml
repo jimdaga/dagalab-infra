@@ -1,0 +1,31 @@
+# Glance main config (https://github.com/glanceapp/glance/blob/main/docs/configuration.md). Pages are $included below.
+# Secrets come in as environment variables from the `glance` Secret; a missing variable stops Glance from loading the config.
+# Widgets call in-cluster service URLs; links and images point at https://<app>.lab.internal for the browser.
+server:
+  proxied: true   # behind the LAN gateway (Envoy)
+  assets-path: /app/assets
+
+document:
+  head: |
+    <meta name="theme-color" content="#121518">
+    <script src="/assets/dagalab.js" defer></script>
+
+branding:
+  app-name: dagalab
+  logo-text: D
+  hide-footer: true
+  app-background-color: "#121518"
+
+theme:
+  background-color: 210 14 8
+  primary-color: 168 55 55
+  positive-color: 158 55 50
+  negative-color: 4 75 64
+  contrast-multiplier: 1.15
+  custom-css-file: /assets/dagalab.css
+  disable-picker: true
+
+pages:
+  - $include: home.yml
+  - $include: media.yml
+  - $include: lab.yml

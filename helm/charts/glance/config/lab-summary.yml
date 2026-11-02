@@ -1,0 +1,37 @@
+# One-line lab health: Alertmanager alerts, Uptime Kuma monitors down, Argo CD apps not Synced/Healthy.
+# Included by home.yml and lab.yml.
+- type: custom-api
+  title: Lab
+  title-url: /lab
+  css-class: dl-labsum
+  cache: 1m
+  url: http://kube-prometheus-stack-alertmanager.monitoring.svc.cluster.local:9093/api/v2/alerts?active=true&silenced=false&inhibited=false
+  subrequests:
+    uptime:
+      url: http://uptime-kuma.uptime-kuma.svc.cluster.local:3001/api/status-page/heartbeat/lab
+    argo:
+      url: https://kubernetes.default.svc/apis/argoproj.io/v1alpha1/namespaces/argocd/applications
+      headers:
+        Authorization: Bearer ${K8S_TOKEN}
+  template: |
+    {{ $alerts := .JSON.Array "#(labels.severity!=\"none\")#" }}
+    {{ $down := 0 }}
+    {{ range (.Subrequest "uptime").JSON.Array "heartbeatList.@values" }}
+      {{ $n := .Int "#" }}{{ if gt $n 0 }}{{ if eq (.Int (printf "%d.status" (sub $n 1))) 0 }}{{ $down = add $down 1 }}{{ end }}{{ end }}
+    {{ end }}
+    {{ $apps := (.Subrequest "argo").JSON.Array "items" }}
+    {{ $drift := 0 }}
+    {{ range $apps }}{{ if or (ne (.String "status.sync.status") "Synced") (ne (.String "status.health.status") "Healthy") }}{{ $drift = add $drift 1 }}{{ end }}{{ end }}
+    {{ $bad := add (add (len $alerts) $down) $drift }}
+    <div class="dl-status {{ if eq $bad 0 }}ok{{ else }}bad{{ end }}">
+      <span class="dl-status-mark" aria-hidden="true"></span>
+      <div>
+        <div class="color-highlight">{{ if eq $bad 0 }}All good{{ else }}{{ $bad }} thing{{ if gt $bad 1 }}s{{ end }} need a look{{ end }}</div>
+        <div class="color-subdue size-h6">{{ len $apps }} apps · {{ len ((.Subrequest "uptime").JSON.Array "heartbeatList.@keys") }} monitors</div>
+      </div>
+    </div>
+    <div class="dl-stats dl-stats-3 margin-top-10">
+      <a class="dl-stat" href="https://grafana.lab.internal/alerting/list"><div class="dl-stat-value{{ if $alerts }} color-negative{{ end }}">{{ len $alerts }}</div><div class="dl-stat-label">alerts</div></a>
+      <a class="dl-stat" href="https://uptime.lab.internal/status/lab"><div class="dl-stat-value{{ if $down }} color-negative{{ end }}">{{ $down }}</div><div class="dl-stat-label">down</div></a>
+      <a class="dl-stat" href="https://argocd.lab.internal/applications"><div class="dl-stat-value{{ if $drift }} color-negative{{ end }}">{{ $drift }}</div><div class="dl-stat-label">drifting</div></a>
+    </div>

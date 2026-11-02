@@ -19,7 +19,7 @@ certificate:
 # local addresses (the *arr apps, qBittorrent's pod-network bypass) won't prompt via the gateway.
 routes:
   - { host: homepage, namespace: homepage,        service: homepage,                      port: 3000 }
-  - { host: homarr,   namespace: homarr,          service: homarr,                        port: 7575 }
+  - { host: glance,   namespace: glance,          service: glance,                        port: 8080 }
   # httpPaths: plain http only for these prefixes. /local/ = HA's static files (doorbell chime fetched by Sonos).
   - { host: home,     namespace: home-assistant,  service: home-assistant,                port: 8123, httpPaths: [/local/] }
   # http: true also serves plain http://<host> (no redirect): TV apps can't install the homelab CA.

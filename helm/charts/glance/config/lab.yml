@@ -1,0 +1,231 @@
+# Lab: is the platform OK? Uptime Kuma (status page `lab`, kept by scripts/uptime-kuma-setup.sh), Argo CD Applications
+# (Kubernetes API, read-only Role from templates/rbac.yaml), Alertmanager, Prometheus, Longhorn and Home Assistant's DSM sensors.
+- name: Lab
+  columns:
+    - size: full
+      widgets:
+        - $include: lab-summary.yml
+
+        - type: custom-api
+          title: Uptime
+          title-url: https://uptime.lab.internal/status/lab
+          css-class: dl-uptime
+          cache: 1m
+          url: http://uptime-kuma.uptime-kuma.svc.cluster.local:3001/api/status-page/lab
+          subrequests:
+            beats:
+              url: http://uptime-kuma.uptime-kuma.svc.cluster.local:3001/api/status-page/heartbeat/lab
+          template: |
+            {{ $beats := (.Subrequest "beats").JSON }}
+            {{ range .JSON.Array "publicGroupList" }}
+              {{ $mons := .Array "monitorList" }}
+              <div class="dl-group-label">{{ .String "name" }} <span class="color-subdue">{{ len $mons }}</span></div>
+              <div class="dl-grid dl-grid-wide">
+              {{ range $mons }}
+                {{ $id := .Int "id" }}
+                {{ $list := $beats.Array (printf "heartbeatList.%d" $id) }}
+                {{ $n := len $list }}
+                {{ $last := 1 }}{{ if $n }}{{ $last = (index $list (sub $n 1)).Int "status" }}{{ end }}
+                <div class="dl-tile dl-mon{{ if eq $last 0 }} is-down{{ end }}">
+                  <span class="dl-dot {{ if eq $last 1 }}ok{{ else if eq $last 0 }}bad{{ else }}warn{{ end }}"></span>
+                  <span class="dl-tile-text">
+                    <span class="dl-tile-name">{{ .String "name" }}</span>
+                    <span class="dl-tile-sub">{{ printf "%.2f" (mul ($beats.Float (printf "uptimeList.%d_24" $id)) 100) }}% · 24 h</span>
+                  </span>
+                  <span class="dl-bars" aria-hidden="true">{{ range $i, $b := $list }}{{ if ge $i (sub $n 30) }}<i class="b{{ $b.Int "status" }}"></i>{{ end }}{{ end }}</span>
+                </div>
+              {{ end }}
+              </div>
+            {{ end }}
+
+        - type: custom-api
+          title: Argo CD
+          title-url: https://argocd.lab.internal/applications
+          cache: 1m
+          url: https://kubernetes.default.svc/apis/argoproj.io/v1alpha1/namespaces/argocd/applications
+          headers:
+            Authorization: Bearer ${K8S_TOKEN}
+          template: |
+            {{ $apps := sortByString "metadata.name" "asc" (.JSON.Array "items") }}
+            <div class="dl-grid">
+            {{ range $apps }}
+              {{ $sync := .String "status.sync.status" }}{{ $health := .String "status.health.status" }}
+              {{ $ok := and (eq $sync "Synced") (eq $health "Healthy") }}
+              <a class="dl-tile{{ if not $ok }} is-down{{ end }}" href="https://argocd.lab.internal/applications/argocd/{{ .String "metadata.name" }}">
+                <span class="dl-dot {{ if $ok }}ok{{ else if eq $health "Progressing" }}warn{{ else }}bad{{ end }}"></span>
+                <span class="dl-tile-text">
+                  <span class="dl-tile-name">{{ .String "metadata.name" }}</span>
+                  <span class="dl-tile-sub">{{ if $ok }}{{ with .String "status.operationState.finishedAt" }}synced <span {{ . | parseTime "rfc3339" | toRelativeTime }}></span> ago{{ else }}synced{{ end }}{{ else }}{{ $health }} · {{ $sync }}{{ end }}</span>
+                </span>
+              </a>
+            {{ end }}
+            </div>
+
+        - type: custom-api
+          title: Alerts
+          title-url: https://grafana.lab.internal/alerting/list
+          cache: 1m
+          url: http://kube-prometheus-stack-alertmanager.monitoring.svc.cluster.local:9093/api/v2/alerts?active=true&silenced=false&inhibited=false
+          template: |
+            {{ $alerts := .JSON.Array "#(labels.severity!=\"none\")#" }}
+            {{ if $alerts }}
+              <ul class="list list-gap-14">
+              {{ range $alerts }}
+                <li class="dl-row">
+                  <div class="min-width-0">
+                    <div class="color-highlight">{{ .String "labels.alertname" }}{{ with .String "labels.namespace" }} <span class="color-subdue">· {{ . }}</span>{{ end }}</div>
+                    <div class="color-subdue size-h6">{{ with .String "annotations.summary" }}{{ . }}{{ else }}{{ .String "annotations.description" }}{{ end }}</div>
+                    <div class="color-subdue size-h6">since <span {{ .String "startsAt" | parseTime "rfc3339" | toRelativeTime }}></span></div>
+                  </div>
+                  <span class="dl-pill {{ if eq (.String "labels.severity") "critical" }}bad{{ else }}warn{{ end }}">{{ .String "labels.severity" }}</span>
+                </li>
+              {{ end }}
+              </ul>
+            {{ else }}
+              <div class="dl-summary">No alerts firing</div>
+            {{ end }}
+
+    - size: small
+      widgets:
+        - type: custom-api
+          title: Nodes
+          title-url: https://grafana.lab.internal/
+          cache: 1m
+          url: http://kube-prometheus-stack-prometheus.monitoring.svc.cluster.local:9090/api/v1/query
+          parameters:
+            query: 100 * (1 - avg by (nodename) (rate(node_cpu_seconds_total{mode="idle"}[5m]) * on(instance) group_left(nodename) node_uname_info))
+          subrequests:
+            mem:
+              url: http://kube-prometheus-stack-prometheus.monitoring.svc.cluster.local:9090/api/v1/query
+              parameters:
+                query: 100 * (1 - node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes) * on(instance) group_left(nodename) node_uname_info
+            disk:
+              url: http://kube-prometheus-stack-prometheus.monitoring.svc.cluster.local:9090/api/v1/query
+              parameters:
+                query: 100 * (1 - node_filesystem_avail_bytes{mountpoint="/"} / node_filesystem_size_bytes{mountpoint="/"}) * on(instance) group_left(nodename) node_uname_info
+            pods:
+              url: http://kube-prometheus-stack-prometheus.monitoring.svc.cluster.local:9090/api/v1/query
+              parameters:
+                query: count by (node) (kube_pod_info)
+          template: |
+            {{ $mem := (.Subrequest "mem").JSON }}{{ $disk := (.Subrequest "disk").JSON }}{{ $pods := (.Subrequest "pods").JSON }}
+            <ul class="list list-gap-14">
+            {{ range sortByString "metric.nodename" "asc" (.JSON.Array "data.result") }}
+              {{ $node := .String "metric.nodename" }}
+              {{ $cpu := .Float "value.1" }}
+              {{ $m := $mem.Float (printf "data.result.#(metric.nodename==\"%s\").value.1" $node) }}
+              {{ $d := $disk.Float (printf "data.result.#(metric.nodename==\"%s\").value.1" $node) }}
+              <li>
+                <div class="flex justify-between"><span class="color-highlight">{{ $node }}</span><span class="color-subdue size-h6">{{ $pods.Float (printf "data.result.#(metric.node==\"%s\").value.1" $node) | printf "%.0f" }} pods</span></div>
+                <div class="dl-meters margin-top-5">
+                  <div><span class="dl-meter{{ if gt $cpu 85.0 }} hot{{ end }}"><span style="width: {{ printf "%.0f" $cpu }}%"></span></span><span>cpu {{ printf "%.0f" $cpu }}%</span></div>
+                  <div><span class="dl-meter{{ if gt $m 85.0 }} hot{{ end }}"><span style="width: {{ printf "%.0f" $m }}%"></span></span><span>mem {{ printf "%.0f" $m }}%</span></div>
+                  <div><span class="dl-meter{{ if gt $d 85.0 }} hot{{ end }}"><span style="width: {{ printf "%.0f" $d }}%"></span></span><span>disk {{ printf "%.0f" $d }}%</span></div>
+                </div>
+              </li>
+            {{ end }}
+            </ul>
+
+        - type: custom-api
+          title: Power
+          title-url: https://grafana.lab.internal/d/dagalab-ups
+          cache: 1m
+          url: http://kube-prometheus-stack-prometheus.monitoring.svc.cluster.local:9090/api/v1/query
+          parameters:
+            query: ups:power_watts
+          subrequests:
+            charge:
+              url: http://kube-prometheus-stack-prometheus.monitoring.svc.cluster.local:9090/api/v1/query
+              parameters: { query: network_ups_tools_battery_charge }
+            runtime:
+              url: http://kube-prometheus-stack-prometheus.monitoring.svc.cluster.local:9090/api/v1/query
+              parameters: { query: network_ups_tools_battery_runtime / 60 }
+            battery:
+              url: http://kube-prometheus-stack-prometheus.monitoring.svc.cluster.local:9090/api/v1/query
+              parameters: { query: 'network_ups_tools_ups_status{flag="OB"}' }
+          template: |
+            {{ $onBattery := eq ((.Subrequest "battery").JSON.Int "data.result.0.value.1") 1 }}
+            <div class="dl-status {{ if $onBattery }}bad{{ else }}ok{{ end }}">
+              <span class="dl-status-mark" aria-hidden="true"></span>
+              <div class="color-highlight">{{ if $onBattery }}On battery{{ else }}On mains power{{ end }}</div>
+            </div>
+            <div class="dl-stats dl-stats-3 margin-top-10">
+              <div class="dl-stat"><div class="dl-stat-value">{{ printf "%.0f" (.JSON.Float "data.result.0.value.1") }}<small> W</small></div><div class="dl-stat-label">load</div></div>
+              <div class="dl-stat"><div class="dl-stat-value">{{ printf "%.0f" ((.Subrequest "charge").JSON.Float "data.result.0.value.1") }}<small>%</small></div><div class="dl-stat-label">battery</div></div>
+              <div class="dl-stat"><div class="dl-stat-value">{{ printf "%.0f" ((.Subrequest "runtime").JSON.Float "data.result.0.value.1") }}<small> min</small></div><div class="dl-stat-label">runtime</div></div>
+            </div>
+
+        - type: custom-api
+          title: daga-nas
+          title-url: https://192.168.3.20:5001
+          cache: 5m
+          url: http://home-assistant.home-assistant.svc.cluster.local:8123/api/states
+          headers:
+            Authorization: Bearer ${HA_TOKEN}
+          template: |
+            {{ $status := .JSON.String "#(entity_id==\"sensor.daga_nas_volume_2_status\").state" }}
+            {{ $used := .JSON.Float "#(entity_id==\"sensor.daga_nas_volume_2_volume_used\").state" }}
+            {{ $drives := .JSON.Array "#(entity_id%\"sensor.daga_nas_*drive_*_status\")#" }}
+            {{ $badDrives := .JSON.Array "#(entity_id%\"sensor.daga_nas_*drive_*_status\")#|#(state!=\"normal\")#" }}
+            <div class="dl-status {{ if and (eq $status "normal") (not $badDrives) }}ok{{ else }}bad{{ end }}">
+              <span class="dl-status-mark" aria-hidden="true"></span>
+              <div>
+                <div class="color-highlight">Volume 2 {{ $status }}</div>
+                <div class="color-subdue size-h6">{{ len $drives }} drives{{ if $badDrives }} · <span class="color-negative">{{ len $badDrives }} not normal</span>{{ else }} normal{{ end }}</div>
+              </div>
+            </div>
+            <div class="dl-meter margin-top-10{{ if gt $used 85.0 }} hot{{ end }}"><span style="width: {{ printf "%.0f" $used }}%"></span></div>
+            <div class="color-subdue size-h6 margin-top-5">{{ printf "%.0f" $used }}% used ·
+              disks {{ .JSON.String "#(entity_id==\"sensor.daga_nas_volume_2_average_disk_temp\").state" }}°F ·
+              system {{ .JSON.String "#(entity_id==\"sensor.daga_nas_temperature\").state" }}°F
+              {{ if eq (.JSON.String "#(entity_id==\"update.daga_nas_dsm_update\").state") "on" }} · <span class="color-primary">DSM update</span>{{ end }}
+            </div>
+
+        - type: custom-api
+          title: Longhorn
+          title-url: https://longhorn.lab.internal/
+          cache: 5m
+          url: http://longhorn-frontend.longhorn-system.svc.cluster.local/v1/volumes
+          template: |
+            {{ $all := .JSON.Array "data" }}
+            {{ $attached := .JSON.Array "data.#(state==\"attached\")#" }}
+            {{ $degraded := .JSON.Array "data.#(robustness==\"degraded\")#" }}
+            {{ $faulted := .JSON.Array "data.#(robustness==\"faulted\")#" }}
+            <div class="dl-stats dl-stats-3">
+              <div class="dl-stat"><div class="dl-stat-value">{{ len $attached }}<small>/{{ len $all }}</small></div><div class="dl-stat-label">attached</div></div>
+              <div class="dl-stat"><div class="dl-stat-value{{ if $degraded }} dl-warm{{ end }}">{{ len $degraded }}</div><div class="dl-stat-label">degraded</div></div>
+              <div class="dl-stat"><div class="dl-stat-value{{ if $faulted }} color-negative{{ end }}">{{ len $faulted }}</div><div class="dl-stat-label">faulted</div></div>
+            </div>
+            {{ range $degraded }}<div class="color-subdue size-h6 margin-top-5">{{ .String "kubernetesStatus.namespace" }}/{{ .String "kubernetesStatus.pvcName" }} degraded</div>{{ end }}
+
+        - type: releases
+          title: Upstream releases
+          cache: 6h
+          show-source-icon: true
+          collapse-after: 6
+          repositories:
+            - jellyfin/jellyfin
+            - home-assistant/core
+            - Sonarr/Sonarr
+            - Radarr/Radarr
+            - Prowlarr/Prowlarr
+            - seerr-team/seerr
+            - advplyr/audiobookshelf
+            - argoproj/argo-cd
+            - longhorn/longhorn
+            - rancher/rke2
+            - louislam/uptime-kuma
+            - glanceapp/glance
+
+        - type: bookmarks
+          title: Platform
+          groups:
+            - links:
+                - { title: Homepage, url: "https://homepage.lab.internal/", icon: "di:homepage" }
+                - { title: Argo CD, url: "https://argocd.lab.internal/", icon: "di:argo-cd" }
+                - { title: Grafana, url: "https://grafana.lab.internal/", icon: "di:grafana" }
+                - { title: Uptime Kuma, url: "https://uptime.lab.internal/", icon: "di:uptime-kuma" }
+                - { title: Longhorn, url: "https://longhorn.lab.internal/", icon: "di:longhorn" }
+                - { title: Vault, url: "https://vault.lab.internal/", icon: "di:vault" }
+                - { title: UniFi, url: "https://192.168.3.1/", icon: "di:ubiquiti-unifi" }
+                - { title: DSM, url: "https://192.168.3.20:5001/", icon: "di:synology-dsm" }

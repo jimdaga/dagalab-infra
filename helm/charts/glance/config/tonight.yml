@@ -1,0 +1,40 @@
+# Episodes airing today (Sonarr) and movies out today (Radarr digital/physical). Included by home.yml.
+- type: custom-api
+  title: On today
+  title-url: https://sonarr.lab.internal/calendar
+  cache: 15m
+  template: |
+    {{ $today := now | formatTime "2006-01-02" }}
+    {{ $tomorrow := offsetNow "24h" | formatTime "2006-01-02" }}
+    {{ $tv := newRequest "http://sonarr.media.svc.cluster.local:8989/api/v3/calendar"
+        | withParameter "start" $today | withParameter "end" $tomorrow | withParameter "includeSeries" "true"
+        | withHeader "X-Api-Key" "${SONARR_KEY}" | getResponse }}
+    {{ $movies := newRequest "http://radarr.media.svc.cluster.local:7878/api/v3/calendar"
+        | withParameter "start" $today | withParameter "end" $tomorrow
+        | withHeader "X-Api-Key" "${RADARR_KEY}" | getResponse }}
+    {{ $eps := $tv.JSON.Array (printf "#(airDate==\"%s\")#" $today) }}
+    {{ $films := $movies.JSON.Array (printf "#(digitalRelease%%\"%s*\")#" $today) }}
+    {{ if or $eps $films }}
+      <ul class="list list-gap-10">
+      {{ range $eps }}
+        <li class="dl-row">
+          <div class="min-width-0">
+            <div class="color-highlight text-truncate">{{ .String "series.title" }}</div>
+            <div class="color-subdue size-h6">S{{ printf "%02d" (.Int "seasonNumber") }}E{{ printf "%02d" (.Int "episodeNumber") }} · {{ (.String "airDateUtc" | parseTime "rfc3339").Local.Format "3:04 PM" }}</div>
+          </div>
+          {{ if .Bool "hasFile" }}<span class="dl-pill ok">ready</span>{{ end }}
+        </li>
+      {{ end }}
+      {{ range $films }}
+        <li class="dl-row">
+          <div class="min-width-0">
+            <div class="color-highlight text-truncate">{{ .String "title" }}</div>
+            <div class="color-subdue size-h6">digital release</div>
+          </div>
+          {{ if .Bool "hasFile" }}<span class="dl-pill ok">ready</span>{{ else }}<span class="dl-pill info">movie</span>{{ end }}
+        </li>
+      {{ end }}
+      </ul>
+    {{ else }}
+      <div class="dl-summary">Nothing new today</div>
+    {{ end }}

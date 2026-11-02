@@ -1,0 +1,15 @@
+# config/*.yml -> /app/config (glance.yml $includes the pages), assets/* -> /app/assets (served at /assets/).
+# Copied verbatim: Glance's Go templates and ${ENV} references reach Glance untouched.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: glance-config
+data:
+{{ (.Files.Glob "config/*.yml").AsConfig | indent 2 }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: glance-assets
+data:
+{{ (.Files.Glob "assets/*").AsConfig | indent 2 }}

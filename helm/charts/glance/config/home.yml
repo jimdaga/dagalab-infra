@@ -1,0 +1,113 @@
+# Home: the house right now. Home Assistant via its REST API with the long-lived token (Vault secret/home-assistant).
+# Light tiles toggle through the HA webhook in helm/charts/home-assistant-packages/packages/glance.yaml (assets/dagalab.js).
+- name: Home
+  columns:
+    - size: small
+      widgets:
+        - type: weather
+          location: Leominster, Massachusetts, United States
+          units: imperial
+          hour-format: 12h
+        - $include: lab-summary.yml
+
+    - size: full
+      widgets:
+        - type: custom-api
+          title: Now
+          hide-header: true
+          css-class: dl-hero
+          cache: 1m
+          url: http://home-assistant.home-assistant.svc.cluster.local:8123/api/states/weather.forecast_home
+          headers: &ha
+            Authorization: Bearer ${HA_TOKEN}
+          subrequests:
+            up:
+              url: http://home-assistant.home-assistant.svc.cluster.local:8123/api/states/climate.upstairs_dobson
+              headers: *ha
+            down:
+              url: http://home-assistant.home-assistant.svc.cluster.local:8123/api/states/climate.downstairs_dobson
+              headers: *ha
+            solar:
+              url: http://home-assistant.home-assistant.svc.cluster.local:8123/api/states/sensor.envoy_482525036022_current_power_production
+              headers: *ha
+            house:
+              url: http://home-assistant.home-assistant.svc.cluster.local:8123/api/states/sensor.envoy_482525036022_current_power_consumption
+              headers: *ha
+          template: |
+            {{ $h := now | formatTime "15" }}
+            <div class="dl-hero-head">
+              <div class="size-h1 color-highlight">{{ if lt $h "05" }}Good night{{ else if lt $h "12" }}Good morning{{ else if lt $h "18" }}Good afternoon{{ else }}Good evening{{ end }}</div>
+              <div class="color-subdue">{{ now | formatTime "Monday, January 2" }}</div>
+            </div>
+            <div class="dl-stats dl-stats-4 margin-top-15">
+              <div class="dl-stat">
+                <div class="dl-stat-value">{{ .JSON.Int "attributes.temperature" }}°</div>
+                <div class="dl-stat-label">outside · {{ replaceAll "-" " " (.JSON.String "state") }}</div>
+              </div>
+              {{ $up := .Subrequest "up" }}{{ $down := .Subrequest "down" }}
+              <div class="dl-stat">
+                <div class="dl-stat-value">{{ $up.JSON.Int "attributes.current_temperature" }}°</div>
+                <div class="dl-stat-label">upstairs{{ if eq ($up.JSON.String "attributes.hvac_action") "heating" }} · <span class="dl-warm">heating</span>{{ else }} · set {{ $up.JSON.Int "attributes.temperature" }}°{{ end }}</div>
+              </div>
+              <div class="dl-stat">
+                <div class="dl-stat-value">{{ $down.JSON.Int "attributes.current_temperature" }}°</div>
+                <div class="dl-stat-label">downstairs{{ if eq ($down.JSON.String "attributes.hvac_action") "heating" }} · <span class="dl-warm">heating</span>{{ else }} · set {{ $down.JSON.Int "attributes.temperature" }}°{{ end }}</div>
+              </div>
+              {{ $solar := (.Subrequest "solar").JSON.Float "state" }}{{ $house := (.Subrequest "house").JSON.Float "state" }}
+              <div class="dl-stat">
+                <div class="dl-stat-value">{{ printf "%.1f" $house }}<small> kW</small></div>
+                <div class="dl-stat-label">{{ if gt $solar 0.05 }}solar <span class="color-positive">{{ printf "%.1f" $solar }} kW</span>{{ else }}house use · no sun{{ end }}</div>
+              </div>
+            </div>
+
+        - type: custom-api
+          title: Lights
+          title-url: https://home.lab.internal/
+          css-class: dl-lights
+          cache: 30s
+          url: http://home-assistant.home-assistant.svc.cluster.local:8123/api/states
+          headers: *ha
+          template: |
+            {{ $rooms := .JSON.Array "#(attributes.is_hue_group==true)#" }}
+            {{ $on := .JSON.Array "#(attributes.is_hue_group==true)#|#(state==\"on\")#" }}
+            <div class="dl-summary">{{ if $on }}{{ len $on }} of {{ len $rooms }} rooms on{{ else }}Everything is off{{ end }}</div>
+            <div class="dl-grid" data-ha-webhook="https://home.lab.internal/api/webhook/${HA_LIGHT_WEBHOOK}">
+              {{ range sortByString "attributes.friendly_name" "asc" $rooms }}
+                {{ $state := .String "state" }}
+                <button type="button" class="dl-tile dl-light{{ if eq $state "on" }} is-on{{ end }}{{ if eq $state "unavailable" }} is-off-grid{{ end }}" data-entity="{{ .String "entity_id" }}"{{ if eq $state "unavailable" }} disabled{{ end }}>
+                  <span class="dl-tile-icon" aria-hidden="true"></span>
+                  <span class="dl-tile-text">
+                    <span class="dl-tile-name">{{ replaceAll "’" "'" (.String "attributes.friendly_name") }}</span>
+                    <span class="dl-tile-sub">{{ if eq $state "on" }}on{{ if .Exists "attributes.brightness" }} · {{ div (mul (.Int "attributes.brightness") 100) 255 }}%{{ end }}{{ else }}{{ $state }}{{ end }}</span>
+                  </span>
+                </button>
+              {{ end }}
+            </div>
+
+        - type: custom-api
+          title: Speakers
+          title-url: https://home.lab.internal/
+          cache: 1m
+          url: http://home-assistant.home-assistant.svc.cluster.local:8123/api/states
+          headers: *ha
+          template: |
+            {{ $playing := .JSON.Array "#(entity_id%\"media_player.*\")#|#(state==\"playing\")#" }}
+            {{ if $playing }}
+              <ul class="list list-gap-14">
+              {{ range $playing }}
+                <li class="dl-row">
+                  <div class="min-width-0">
+                    <div class="color-highlight text-truncate">{{ .String "attributes.media_title" }}</div>
+                    <div class="color-subdue size-h6 text-truncate">{{ with .String "attributes.media_artist" }}{{ . }} · {{ end }}{{ .String "attributes.friendly_name" }}</div>
+                  </div>
+                  <span class="dl-pill ok">playing</span>
+                </li>
+              {{ end }}
+              </ul>
+            {{ else }}
+              <div class="dl-summary">Nothing playing</div>
+            {{ end }}
+
+    - size: small
+      widgets:
+        - $include: tonight.yml

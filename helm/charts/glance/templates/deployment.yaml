@@ -1,0 +1,81 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: glance
+  labels: &labels
+    app.kubernetes.io/name: glance
+spec:
+  replicas: 1
+  selector:
+    matchLabels: *labels
+  template:
+    metadata:
+      labels: *labels
+      annotations:
+        # Glance's file watcher misses ConfigMap symlink swaps: roll the pod on any config/asset change instead
+        checksum/files: {{ printf "%s%s" (.Files.Glob "config/*.yml").AsConfig (.Files.Glob "assets/*").AsConfig | sha256sum }}
+    spec:
+      serviceAccountName: glance
+      automountServiceAccountToken: true   # only for the cluster CA (SSL_CERT_DIR); the API token is K8S_TOKEN
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        runAsGroup: 65534
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: glance
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          env:
+            - name: TZ
+              value: {{ .Values.timezone }}
+            # system roots + the cluster CA, so the Argo CD widget can verify https://kubernetes.default.svc
+            - name: SSL_CERT_DIR
+              value: /etc/ssl/certs:/var/run/secrets/kubernetes.io/serviceaccount
+            - name: K8S_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: glance-k8s
+                  key: token
+          envFrom:
+            - secretRef:
+                name: glance   # API keys, from Vault via helm/charts/secret-stores
+            - secretRef:
+                name: glance-ha-webhook   # HA_LIGHT_WEBHOOK: secret ID of HA's light-toggle webhook
+          ports:
+            - name: http
+              containerPort: 8080
+          readinessProbe:
+            httpGet: { path: /api/healthz, port: http }
+            periodSeconds: 15
+          livenessProbe:
+            httpGet: { path: /api/healthz, port: http }
+            periodSeconds: 30
+          resources: {{- toYaml .Values.resources | nindent 12 }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          volumeMounts:
+            - { name: config, mountPath: /app/config, readOnly: true }
+            - { name: assets, mountPath: /app/assets, readOnly: true }
+      volumes:
+        - name: config
+          configMap:
+            name: glance-config
+        - name: assets
+          configMap:
+            name: glance-assets
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: glance
+spec:
+  selector:
+    app.kubernetes.io/name: glance
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http

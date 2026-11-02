@@ -1,0 +1,15 @@
+# Glance: phone-first dashboard, https://glance.lab.internal (helm/charts/lan-gateway). LAN only.
+# The dashboard itself is config/*.yml (pages) and assets/ (CSS/JS), copied verbatim into ConfigMaps so Helm never
+# touches Glance's {{ }} templates. Edit those files; the checksum annotation rolls the pod.
+image:
+  repository: glanceapp/glance
+  tag: v0.8.7
+
+timezone: America/New_York
+
+resources:
+  requests:
+    cpu: 10m
+    memory: 48Mi
+  limits:
+    memory: 256Mi
