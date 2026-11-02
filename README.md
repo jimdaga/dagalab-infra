@@ -278,3 +278,4 @@ Test without an outage: `DRY_RUN=1 /usr/local/lib/dagalab/ups-shutdown.sh` on a 
 - [ ] Optional: a real outage test (unplug for > 10 min) once the BIOS settings are done
 - [x] DSM: add the bastion (192.168.3.100) to the NUT server allow list; then `scripts/nut-setup.sh 192.168.3.100`
 - [x] DSM Task Scheduler: create the two `ups-wake.py` tasks (README "UPS / power")
+- [ ] Renovate: finish setup. `renovate.json` exists but Renovate has never run (no PRs, no Dependency Dashboard): install the Renovate GitHub app on this repo, merge its onboarding PR, check the dashboard picks up chart `targetRevision`s and image tags in `values.yaml`. Until then image bumps are manual (Prowlarr bumped by hand to 2.7.0 on 2026-11-01; Plex is internet-facing, keep it current)
