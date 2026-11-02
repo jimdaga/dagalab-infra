@@ -1,0 +1,200 @@
+# Sports: Boston teams + Auburn, SEC football, scores, golf. ESPN's public site API (no key; site.api.espn.com).
+# Teams are ESPN ids: Bruins nhl/bos, Patriots nfl/ne, Red Sox mlb/bos, Auburn college-football/2.
+# ESPN dates look like 2026-11-08T21:25Z (no seconds), hence the "2006-01-02T15:04Z" layout.
+- name: Sports
+  columns:
+    - size: full
+      widgets:
+        - type: custom-api
+          title: My teams
+          css-class: dl-teams
+          cache: 2m
+          url: https://site.api.espn.com/apis/site/v2/sports/hockey/nhl/teams/bos/schedule
+          subrequests:
+            pats:
+              url: https://site.api.espn.com/apis/site/v2/sports/football/nfl/teams/ne/schedule
+            sox:
+              url: https://site.api.espn.com/apis/site/v2/sports/baseball/mlb/teams/bos/schedule
+            auburn:
+              url: https://site.api.espn.com/apis/site/v2/sports/football/college-football/teams/2/schedule
+          template: |
+            {{ define "team" }}
+              {{ $id := .JSON.String "team.id" }}
+              {{ $last := "" }}{{ $next := "" }}{{ $live := "" }}
+              {{ range .JSON.Array "events" }}
+                {{ $state := .String "competitions.0.status.type.state" }}
+                {{ if eq $state "post" }}{{ $last = .String "id" }}{{ else if eq $state "in" }}{{ $live = .String "id" }}{{ else if and (eq $state "pre") (eq $next "") }}{{ $next = .String "id" }}{{ end }}
+              {{ end }}
+              <div class="dl-team{{ if $live }} is-live{{ end }}">
+                <div class="dl-team-head">
+                  <img class="dl-team-logo" alt="" src="{{ .JSON.String "team.logo" }}">
+                  <div class="min-width-0">
+                    <a class="color-highlight text-truncate block" href="{{ .JSON.String "team.clubhouse" }}">{{ .JSON.String "team.displayName" }}</a>
+                    <div class="color-subdue size-h6">{{ .JSON.String "team.recordSummary" }}{{ with .JSON.String "team.standingSummary" }} · {{ . }}{{ end }}</div>
+                  </div>
+                </div>
+                {{ range .JSON.Array "events" }}
+                  {{ $eid := .String "id" }}
+                  {{ if or (and $live (eq $eid $live)) (and (not $live) (or (eq $eid $last) (eq $eid $next))) }}
+                    {{ $state := .String "competitions.0.status.type.state" }}
+                    {{ $us := index (.Array (printf "competitions.0.competitors.#(id==\"%s\")#" $id)) 0 }}
+                    {{ $them := index (.Array (printf "competitions.0.competitors.#(id!=\"%s\")#" $id)) 0 }}
+                    <div class="dl-game">
+                      <span class="dl-game-tag{{ if eq $state "in" }} live{{ else if eq $state "pre" }} next{{ else if $us.Bool "winner" }} win{{ end }}">{{ if eq $state "in" }}Live{{ else if eq $state "post" }}{{ if $us.Bool "winner" }}W{{ else if $them.Bool "winner" }}L{{ else }}T{{ end }}{{ else }}Next{{ end }}</span>
+                      <span class="dl-game-opp">{{ if eq ($us.String "homeAway") "home" }}vs{{ else }}@{{ end }} <img alt="" src="{{ $them.String "team.logos.0.href" }}"> {{ $them.String "team.abbreviation" }}</span>
+                      {{ if eq $state "pre" }}
+                        {{ $t := (.String "date" | parseTime "2006-01-02T15:04Z").Local }}
+                        <span class="dl-game-meta">{{ if eq ($t.Format "2006-01-02") (now | formatTime "2006-01-02") }}Today {{ $t.Format "3:04 PM" }}{{ else }}{{ $t.Format "Mon Jan 2 · 3:04 PM" }}{{ end }}{{ with .String "competitions.0.broadcasts.0.media.shortName" }} · {{ . }}{{ end }}</span>
+                      {{ else }}
+                        <span class="dl-game-score">{{ $us.String "score.displayValue" }}–{{ $them.String "score.displayValue" }}</span>
+                        <span class="dl-game-meta">{{ if eq $state "in" }}<span class="color-positive">{{ .String "competitions.0.status.type.shortDetail" }}</span>{{ else }}{{ (.String "date" | parseTime "2006-01-02T15:04Z").Local.Format "Mon Jan 2" }}{{ end }}</span>
+                      {{ end }}
+                    </div>
+                  {{ end }}
+                {{ end }}
+                {{ if and (not $live) (eq $next "") }}<div class="dl-game"><span class="dl-game-tag next">Next</span><span class="color-subdue">Offseason</span></div>{{ end }}
+              </div>
+            {{ end }}
+            <div class="dl-team-grid">
+              {{ template "team" . }}
+              {{ template "team" (.Subrequest "pats") }}
+              {{ template "team" (.Subrequest "auburn") }}
+              {{ template "team" (.Subrequest "sox") }}
+            </div>
+
+        - type: custom-api
+          title: SEC this week
+          title-url: https://www.espn.com/college-football/scoreboard/_/group/8
+          css-class: dl-scores
+          cache: 2m
+          url: https://site.api.espn.com/apis/site/v2/sports/football/college-football/scoreboard?groups=8
+          options:
+            mine: AUB
+          template: &scores |
+            {{ $mine := .Options.StringOr "mine" "" }}
+            {{ $events := sortByString "date" "asc" (.JSON.Array "events") }}
+            {{ if $events }}
+            <ul class="dl-scorelist collapsible-container" data-collapse-after="{{ .Options.IntOr "collapse-after" 8 }}">
+            {{ range $events }}
+              {{ $c := index (.Array "competitions") 0 }}
+              {{ $state := $c.String "status.type.state" }}
+              {{ $ours := $c.Array (printf "competitors.#(team.abbreviation==\"%s\")#" $mine) }}
+              <li class="dl-score{{ if $ours }} is-mine{{ end }}{{ if eq $state "in" }} is-live{{ end }}">
+                <div class="dl-score-teams">
+                  {{ range sortByString "homeAway" "asc" ($c.Array "competitors") }}
+                    <div class="dl-score-team{{ if and (eq $state "post") (not (.Bool "winner")) }} lost{{ end }}">
+                      <img alt="" src="{{ .String "team.logo" }}">
+                      {{ with .Int "curatedRank.current" }}{{ if le . 25 }}<span class="dl-rank">{{ . }}</span>{{ end }}{{ end }}
+                      <span class="dl-score-name">{{ .String "team.shortDisplayName" }}</span>
+                      {{ if ne $state "pre" }}<span class="dl-score-pts">{{ .String "score" }}</span>{{ end }}
+                    </div>
+                  {{ end }}
+                </div>
+                <div class="dl-score-status">
+                  {{ if eq $state "pre" }}
+                    {{ $t := (.String "date" | parseTime "2006-01-02T15:04Z").Local }}
+                    <div>{{ if eq ($t.Format "2006-01-02") (now | formatTime "2006-01-02") }}Today{{ else }}{{ $t.Format "Mon" }}{{ end }}</div>
+                    <div>{{ $t.Format "3:04 PM" }}</div>
+                    <div class="color-subdue">{{ $c.String "broadcasts.0.names.0" }}</div>
+                  {{ else if eq $state "in" }}
+                    <div class="color-positive">{{ $c.String "status.type.shortDetail" }}</div>
+                  {{ else }}
+                    <div class="color-subdue">{{ $c.String "status.type.shortDetail" }}</div>
+                  {{ end }}
+                </div>
+              </li>
+            {{ end }}
+            </ul>
+            {{ else }}<div class="dl-summary">No games this week</div>{{ end }}
+
+        - type: group
+          widgets:
+            - type: custom-api
+              title: NFL
+              css-class: dl-scores
+              cache: 2m
+              url: https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard
+              options: { mine: NE, collapse-after: 6 }
+              template: *scores
+            - type: custom-api
+              title: NHL
+              css-class: dl-scores
+              cache: 2m
+              url: https://site.api.espn.com/apis/site/v2/sports/hockey/nhl/scoreboard
+              options: { mine: BOS, collapse-after: 6 }
+              template: *scores
+            - type: custom-api
+              title: Top 25
+              css-class: dl-scores
+              cache: 2m
+              url: https://site.api.espn.com/apis/site/v2/sports/football/college-football/scoreboard
+              options: { mine: AUB, collapse-after: 6 }
+              template: *scores
+
+    - size: small
+      widgets:
+        - type: custom-api
+          title: Golf
+          title-url: https://www.espn.com/golf/leaderboard
+          cache: 5m
+          url: https://site.api.espn.com/apis/site/v2/sports/golf/pga/scoreboard
+          template: |
+            {{ $majors := "^(Masters Tournament|PGA Championship|U\\.S\\. Open|The Open)" }}
+            {{ $e := index (.JSON.Array "events") 0 }}
+            {{ $c := index ($e.Array "competitions") 0 }}
+            {{ $state := $c.String "status.type.state" }}
+            <div class="flex justify-between items-center gap-10">
+              <div class="min-width-0">
+                <div class="color-highlight text-truncate">{{ $e.String "name" }}</div>
+                <div class="color-subdue size-h6">{{ if eq $state "in" }}<span class="color-positive">{{ $c.String "status.type.detail" }}</span>{{ else if eq $state "pre" }}starts {{ ($e.String "date" | parseTime "2006-01-02T15:04Z").Local.Format "Thu Jan 2" }}{{ else }}Final{{ end }}</div>
+              </div>
+              {{ if findMatch $majors ($e.String "name") }}<span class="dl-pill warn">major</span>{{ end }}
+            </div>
+            {{ if ne $state "pre" }}
+            <ol class="dl-leaders margin-top-10">
+              {{ range $i, $p := $c.Array "competitors" }}{{ if lt $i 5 }}
+                <li><span class="dl-leader-pos">{{ $p.Int "order" }}</span><span class="text-truncate">{{ $p.String "athlete.displayName" }}</span><span class="dl-leader-score">{{ $p.String "score" }}</span></li>
+              {{ end }}{{ end }}
+            </ol>
+            {{ end }}
+            {{ $now := now | formatTime "2006-01-02T15:04Z" }}
+            {{ $next := 0 }}
+            {{ range (.JSON.Array "leagues.0.calendar") }}{{ if and (not $next) (findMatch $majors (.String "label")) (gt (.String "startDate") $now) }}{{ $next = . }}{{ end }}{{ end }}
+            {{ if not $next }}
+              {{ $season := newRequest "https://site.api.espn.com/apis/site/v2/sports/golf/pga/scoreboard" | withParameter "dates" (offsetNow "8760h" | formatTime "2006") | getResponse }}
+              {{ range ($season.JSON.Array "leagues.0.calendar") }}{{ if and (not $next) (findMatch $majors (.String "label")) (gt (.String "startDate") $now) }}{{ $next = . }}{{ end }}{{ end }}{{ end }}
+            {{ if $next }}
+              {{ $start := $next.String "startDate" | parseTime "2006-01-02T15:04Z" }}
+              <div class="dl-nextmajor margin-top-15">
+                <div class="size-h6 color-subdue uppercase">Next major</div>
+                <div class="color-highlight">{{ $next.String "label" }}</div>
+                <div class="color-subdue size-h6">{{ $start.Format "Jan 2" }} · <span {{ toRelativeTime $start }}></span></div>
+              </div>
+            {{ end }}
+
+        - type: custom-api
+          title: Standings
+          cache: 30m
+          url: https://site.api.espn.com/apis/v2/sports/football/nfl/standings?level=3
+          subrequests:
+            nhl:
+              url: https://site.api.espn.com/apis/v2/sports/hockey/nhl/standings?level=3
+          template: |
+            <div class="dl-group-label">AFC East</div>
+            <ul class="dl-standings">
+            {{ range sortByFloat "stats.#(name==\"playoffSeed\").value" "asc" (.JSON.Array "children.#(abbreviation==\"AFC\").children.#(abbreviation==\"EAST\").standings.entries") }}
+              <li class="{{ if eq (.String "team.abbreviation") "NE" }}is-mine{{ end }}">
+                <img alt="" src="{{ .String "team.logos.0.href" }}"><span>{{ .String "team.shortDisplayName" }}</span>
+                <span class="dl-stand-val">{{ .String "stats.#(name==\"wins\").displayValue" }}-{{ .String "stats.#(name==\"losses\").displayValue" }}{{ with .Int "stats.#(name==\"ties\").value" }}-{{ . }}{{ end }}</span>
+              </li>
+            {{ end }}
+            </ul>
+            <div class="dl-group-label">Atlantic</div>
+            <ul class="dl-standings">
+            {{ range sortByFloat "stats.#(name==\"points\").value" "desc" ((.Subrequest "nhl").JSON.Array "children.#(name==\"Eastern Conference\").children.#(name==\"Atlantic Division\").standings.entries") }}
+              <li class="{{ if eq (.String "team.abbreviation") "BOS" }}is-mine{{ end }}">
+                <img alt="" src="{{ .String "team.logos.0.href" }}"><span>{{ .String "team.shortDisplayName" }}</span>
+                <span class="dl-stand-val">{{ .String "stats.#(name==\"points\").displayValue" }} pts</span>
+              </li>
+            {{ end }}
+            </ul>

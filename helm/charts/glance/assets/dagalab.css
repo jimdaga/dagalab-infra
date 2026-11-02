@@ -383,3 +383,141 @@ a.dl-tile:hover, button.dl-tile:hover:not(:disabled) { background: var(--dl-tile
 .dl-bars i.b3 { background: var(--dl-info); }
 
 .dl-labsum .dl-stat { text-align: center; }
+
+/* ---------- Sports ---------- */
+
+.dl-team-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 10px;
+}
+.dl-team {
+    padding: 12px;
+    border-radius: var(--dl-radius);
+    background: var(--dl-tile);
+    border: 1px solid transparent;
+    display: grid;
+    gap: 8px;
+    min-width: 0;
+}
+.dl-team.is-live { border-color: hsl(158 50% 35%); }
+.dl-team-head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 2px;
+}
+.dl-team-logo {
+    width: 36px;
+    height: 36px;
+    object-fit: contain;
+    flex-shrink: 0;
+    /* dark navy logos (Patriots, Sox, Auburn) vanish on slate: sit them on a soft light disc */
+    padding: 4px;
+    border-radius: 50%;
+    background: hsl(210 15% 85%);
+}
+.dl-game {
+    display: grid;
+    grid-template-columns: 3.4rem 1fr auto;
+    align-items: center;
+    gap: 8px;
+    font-size: 1.3rem;
+}
+.dl-game:has(.dl-game-score) { grid-template-columns: 3.4rem 1fr auto auto; }
+.dl-game-tag {
+    font-size: 1.05rem;
+    font-weight: 700;
+    text-align: center;
+    padding: 1px 0;
+    border-radius: 6px;
+    background: hsl(4 45% 15%);
+    color: var(--dl-bad);
+}
+.dl-game-tag.win { background: hsl(158 40% 14%); color: var(--dl-ok); }
+.dl-game-tag.next { background: hsl(210 14% 18%); color: var(--color-text-base); }
+.dl-game-tag.live { background: var(--dl-ok); color: hsl(210 14% 8%); }
+.dl-game-opp {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--color-text-highlight);
+    min-width: 0;
+}
+.dl-game-opp img { width: 18px; height: 18px; object-fit: contain; }
+.dl-game-score {
+    font-weight: 700;
+    color: var(--color-text-highlight);
+    font-variant-numeric: tabular-nums;
+}
+.dl-game-meta {
+    font-size: 1.15rem;
+    color: var(--color-text-subdue);
+    text-align: right;
+    white-space: nowrap;
+}
+
+/* score lists (SEC, NFL, NHL, Top 25) */
+.dl-scorelist {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    gap: 8px;
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+.dl-score {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 9px 12px;
+    border-radius: var(--dl-radius);
+    background: var(--dl-tile);
+    border: 1px solid transparent;
+}
+.dl-score.is-mine { border-color: hsl(40 60% 35%); background: hsl(40 30% 12%); }
+.dl-score.is-live { border-color: hsl(158 50% 35%); }
+.dl-score-teams { flex: 1; display: grid; gap: 4px; min-width: 0; }
+.dl-score-team {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    color: var(--color-text-highlight);
+    font-size: 1.3rem;
+}
+.dl-score-team.lost { color: var(--color-text-subdue); }
+.dl-score-team img { width: 18px; height: 18px; object-fit: contain; }
+.dl-score-name { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dl-score-pts { font-weight: 700; font-variant-numeric: tabular-nums; }
+.dl-rank { font-size: 1rem; color: var(--color-text-subdue); }
+.dl-score-status {
+    flex-shrink: 0;
+    width: 6.5rem;
+    text-align: right;
+    font-size: 1.1rem;
+    color: var(--color-text-base);
+    border-left: 1px solid var(--dl-line);
+    padding-left: 8px;
+}
+
+/* golf + standings */
+.dl-leaders, .dl-standings {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: grid;
+    gap: 6px;
+}
+.dl-leaders li, .dl-standings li {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 1.3rem;
+    color: var(--color-text-highlight);
+}
+.dl-leader-pos { width: 1.8rem; color: var(--color-text-subdue); font-variant-numeric: tabular-nums; }
+.dl-leaders .text-truncate { flex: 1; }
+.dl-leader-score, .dl-stand-val { margin-left: auto; font-variant-numeric: tabular-nums; color: var(--color-text-base); }
+.dl-standings img { width: 18px; height: 18px; object-fit: contain; }
+.dl-standings li.is-mine { color: var(--dl-warn); }
+.dl-nextmajor { padding-top: 12px; border-top: 1px solid var(--dl-line); }

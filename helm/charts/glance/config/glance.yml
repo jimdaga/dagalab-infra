@@ -28,4 +28,5 @@ theme:
 pages:
   - $include: home.yml
   - $include: media.yml
+  - $include: sports.yml
   - $include: lab.yml
