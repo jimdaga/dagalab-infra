@@ -38,8 +38,12 @@ controllers:
         env:
           VPN_SERVICE_PROVIDER: private internet access
           VPN_TYPE: openvpn
-          # near the lab's users (Massachusetts); Gluetun picks among these, so one region down isn't an outage
-          SERVER_REGIONS: US Massachusetts,US Rhode Island,US New Hampshire,US Connecticut
+          # near the lab's users (Massachusetts); Gluetun picks among these, so one region down isn't an outage.
+          # Most New England servers share one host (84.239.x, all unreachable 2026-11-02); New York and East
+          # are on other networks, so one provider outage can't take every public monitor down.
+          SERVER_REGIONS: US Massachusetts,US Rhode Island,US New Hampshire,US Connecticut,US New York,US East
+          # refresh PIA's server list daily instead of trusting the one baked into the image
+          UPDATER_PERIOD: 24h
           HTTPPROXY: "on"
           HTTPPROXY_LISTENING_ADDRESS: ":8888"
           # Service traffic: proxy (8888) and Gluetun's control server (8000, API key; Homepage's VPN widget).

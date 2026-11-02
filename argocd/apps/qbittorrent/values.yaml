@@ -22,6 +22,8 @@ controllers:
           VPN_TYPE: openvpn
           # PIA only offers port forwarding outside the US
           SERVER_REGIONS: CA Toronto,CA Montreal
+          # refresh PIA's server list daily instead of trusting the one baked into the image
+          UPDATER_PERIOD: 24h
           PORT_FORWARD_ONLY: "on"
           VPN_PORT_FORWARDING: "on"
           # Push the forwarded port into qBittorrent whenever PIA assigns or renews it.
