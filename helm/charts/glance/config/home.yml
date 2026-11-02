@@ -60,6 +60,51 @@
               </div>
             </div>
 
+        # One line per team: live score, else today's game, else the next one (ESPN, same feeds as the Sports page).
+        - type: custom-api
+          title: Game day
+          title-url: /sports
+          css-class: dl-gameday
+          cache: 2m
+          url: https://site.api.espn.com/apis/site/v2/sports/hockey/nhl/teams/bos/schedule
+          subrequests:
+            pats:
+              url: https://site.api.espn.com/apis/site/v2/sports/football/nfl/teams/ne/schedule
+            auburn:
+              url: https://site.api.espn.com/apis/site/v2/sports/football/college-football/teams/2/schedule
+            sox:
+              url: https://site.api.espn.com/apis/site/v2/sports/baseball/mlb/teams/bos/schedule
+          template: |
+            {{ define "gd" }}
+              {{ $id := .JSON.String "team.id" }}
+              {{ $pick := "" }}
+              {{ range .JSON.Array "events" }}{{ if eq (.String "competitions.0.status.type.state") "in" }}{{ $pick = .String "id" }}{{ end }}{{ end }}
+              {{ if eq $pick "" }}{{ range .JSON.Array "events" }}{{ if and (eq $pick "") (eq (.String "competitions.0.status.type.state") "pre") }}{{ $pick = .String "id" }}{{ end }}{{ end }}{{ end }}
+              {{ range .JSON.Array "events" }}{{ if eq (.String "id") $pick }}
+                {{ $state := .String "competitions.0.status.type.state" }}
+                {{ $us := index (.Array (printf "competitions.0.competitors.#(id==\"%s\")#" $id)) 0 }}
+                {{ $them := index (.Array (printf "competitions.0.competitors.#(id!=\"%s\")#" $id)) 0 }}
+                {{ $t := (.String "date" | parseTime "2006-01-02T15:04Z").Local }}
+                {{ $today := eq ($t.Format "2006-01-02") (now | formatTime "2006-01-02") }}
+                <li class="dl-gd{{ if eq $state "in" }} is-live{{ else if $today }} is-today{{ end }}">
+                  <img class="dl-gd-logo" alt="" src="{{ $us.String "team.logos.0.href" }}">
+                  <span class="dl-gd-match">{{ if eq ($us.String "homeAway") "home" }}vs{{ else }}@{{ end }} {{ $them.String "team.shortDisplayName" }}</span>
+                  {{ if eq $state "in" }}
+                    <span class="dl-gd-score">{{ $us.String "score.displayValue" }}–{{ $them.String "score.displayValue" }}</span>
+                    <span class="dl-gd-when color-positive">{{ .String "competitions.0.status.type.shortDetail" }}</span>
+                  {{ else }}
+                    <span class="dl-gd-when">{{ if $today }}<span class="dl-warm">Tonight</span> {{ $t.Format "3:04 PM" }}{{ else }}{{ $t.Format "Mon 3:04 PM" }}{{ end }}{{ with .String "competitions.0.broadcasts.0.media.shortName" }} · {{ . }}{{ end }}</span>
+                  {{ end }}
+                </li>
+              {{ end }}{{ end }}
+            {{ end }}
+            <ul class="dl-gdlist">
+              {{ template "gd" . }}
+              {{ template "gd" (.Subrequest "pats") }}
+              {{ template "gd" (.Subrequest "auburn") }}
+              {{ template "gd" (.Subrequest "sox") }}
+            </ul>
+
         - type: custom-api
           title: Lights
           title-url: https://home.lab.internal/

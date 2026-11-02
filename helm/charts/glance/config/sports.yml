@@ -30,7 +30,7 @@
                   <img class="dl-team-logo" alt="" src="{{ .JSON.String "team.logo" }}">
                   <div class="min-width-0">
                     <a class="color-highlight text-truncate block" href="{{ .JSON.String "team.clubhouse" }}">{{ .JSON.String "team.displayName" }}</a>
-                    <div class="color-subdue size-h6">{{ .JSON.String "team.recordSummary" }}{{ with .JSON.String "team.standingSummary" }} · {{ . }}{{ end }}</div>
+                    <div class="color-subdue size-h6">{{ if and (not $live) (eq $next "") }}0-0 · Offseason{{ else }}{{ .JSON.String "team.recordSummary" }}{{ with .JSON.String "team.standingSummary" }} · {{ . }}{{ end }}{{ end }}</div>
                   </div>
                 </div>
                 {{ range .JSON.Array "events" }}
@@ -52,7 +52,6 @@
                     </div>
                   {{ end }}
                 {{ end }}
-                {{ if and (not $live) (eq $next "") }}<div class="dl-game"><span class="dl-game-tag next">Next</span><span class="color-subdue">Offseason</span></div>{{ end }}
               </div>
             {{ end }}
             <div class="dl-team-grid">
@@ -131,45 +130,88 @@
               options: { mine: AUB, collapse-after: 6 }
               template: *scores
 
+        - type: group
+          define: &news
+            type: custom-api
+            css-class: dl-news
+            cache: 30m
+            # only stories tagged with the team (the feed mixes in league-wide ones), no video clips
+            template: |
+              {{ $team := .Options.StringOr "team" "" }}
+              {{ $items := .JSON.Array (printf "articles.#(categories.#(description==\"%s\"))#|#(type!=\"Media\")#" $team) }}
+              <ul class="list list-gap-14 collapsible-container" data-collapse-after="4">
+              {{ range $i, $a := $items }}{{ if lt $i 10 }}
+                <li class="dl-headline">
+                  {{ with .String "images.0.url" }}<img loading="lazy" alt="" src="{{ . }}">{{ end }}
+                  <div class="min-width-0">
+                    <a class="color-highlight text-truncate-2-lines" href="{{ .String "links.web.href" }}">{{ .String "headline" }}</a>
+                    <div class="color-subdue size-h6">{{ .String "type" }} · <span {{ .String "published" | parseTime "rfc3339" | toRelativeTime }}></span> ago</div>
+                  </div>
+                </li>
+              {{ end }}{{ else }}
+                <li class="dl-summary">No recent stories</li>
+              {{ end }}
+              </ul>
+          widgets:
+            - <<: *news
+              title: Bruins
+              url: https://site.api.espn.com/apis/site/v2/sports/hockey/nhl/news?team=bos&limit=25
+              options: { team: Boston Bruins }
+            - <<: *news
+              title: Patriots
+              url: https://site.api.espn.com/apis/site/v2/sports/football/nfl/news?team=ne&limit=25
+              options: { team: New England Patriots }
+            - <<: *news
+              title: Auburn
+              url: https://site.api.espn.com/apis/site/v2/sports/football/college-football/news?team=2&limit=25
+              options: { team: Auburn Tigers }
+            - <<: *news
+              title: Red Sox
+              url: https://site.api.espn.com/apis/site/v2/sports/baseball/mlb/news?team=bos&limit=25
+              options: { team: Boston Red Sox }
+
     - size: small
       widgets:
+        # Majors only: the full leaderboard while a major is the current PGA event, otherwise the countdown and dates.
         - type: custom-api
-          title: Golf
+          title: Golf majors
           title-url: https://www.espn.com/golf/leaderboard
           cache: 5m
           url: https://site.api.espn.com/apis/site/v2/sports/golf/pga/scoreboard
           template: |
             {{ $majors := "^(Masters Tournament|PGA Championship|U\\.S\\. Open|The Open)" }}
+            {{ $now := now | formatTime "2006-01-02T15:04Z" }}
             {{ $e := index (.JSON.Array "events") 0 }}
             {{ $c := index ($e.Array "competitions") 0 }}
             {{ $state := $c.String "status.type.state" }}
-            <div class="flex justify-between items-center gap-10">
-              <div class="min-width-0">
-                <div class="color-highlight text-truncate">{{ $e.String "name" }}</div>
-                <div class="color-subdue size-h6">{{ if eq $state "in" }}<span class="color-positive">{{ $c.String "status.type.detail" }}</span>{{ else if eq $state "pre" }}starts {{ ($e.String "date" | parseTime "2006-01-02T15:04Z").Local.Format "Thu Jan 2" }}{{ else }}Final{{ end }}</div>
+            {{ if and (findMatch $majors ($e.String "name")) (ne $state "post") }}
+              <div class="flex justify-between items-center gap-10">
+                <div class="min-width-0">
+                  <div class="color-highlight text-truncate">{{ $e.String "name" }}</div>
+                  <div class="size-h6">{{ if eq $state "in" }}<span class="color-positive">{{ $c.String "status.type.detail" }}</span>{{ else }}<span class="color-subdue">starts {{ ($e.String "date" | parseTime "2006-01-02T15:04Z").Local.Format "Thu Jan 2" }}</span>{{ end }}</div>
+                </div>
+                <span class="dl-pill warn">major</span>
               </div>
-              {{ if findMatch $majors ($e.String "name") }}<span class="dl-pill warn">major</span>{{ end }}
-            </div>
-            {{ if ne $state "pre" }}
-            <ol class="dl-leaders margin-top-10">
-              {{ range $i, $p := $c.Array "competitors" }}{{ if lt $i 5 }}
-                <li><span class="dl-leader-pos">{{ $p.Int "order" }}</span><span class="text-truncate">{{ $p.String "athlete.displayName" }}</span><span class="dl-leader-score">{{ $p.String "score" }}</span></li>
-              {{ end }}{{ end }}
-            </ol>
-            {{ end }}
-            {{ $now := now | formatTime "2006-01-02T15:04Z" }}
-            {{ $next := 0 }}
-            {{ range (.JSON.Array "leagues.0.calendar") }}{{ if and (not $next) (findMatch $majors (.String "label")) (gt (.String "startDate") $now) }}{{ $next = . }}{{ end }}{{ end }}
-            {{ if not $next }}
+              {{ if eq $state "in" }}
+              <ol class="dl-leaders margin-top-10">
+                {{ range $i, $p := $c.Array "competitors" }}{{ if lt $i 10 }}
+                  <li><span class="dl-leader-pos">{{ $p.Int "order" }}</span><span class="text-truncate">{{ $p.String "athlete.displayName" }}</span><span class="dl-leader-score">{{ $p.String "score" }}</span></li>
+                {{ end }}{{ end }}
+              </ol>
+              {{ end }}
+            {{ else }}
+              {{ $cal := .JSON.Array (printf "leagues.0.calendar.#(startDate>\"%s\")#" $now) }}
               {{ $season := newRequest "https://site.api.espn.com/apis/site/v2/sports/golf/pga/scoreboard" | withParameter "dates" (offsetNow "8760h" | formatTime "2006") | getResponse }}
-              {{ range ($season.JSON.Array "leagues.0.calendar") }}{{ if and (not $next) (findMatch $majors (.String "label")) (gt (.String "startDate") $now) }}{{ $next = . }}{{ end }}{{ end }}{{ end }}
-            {{ if $next }}
-              {{ $start := $next.String "startDate" | parseTime "2006-01-02T15:04Z" }}
-              <div class="dl-nextmajor margin-top-15">
-                <div class="size-h6 color-subdue uppercase">Next major</div>
-                <div class="color-highlight">{{ $next.String "label" }}</div>
-                <div class="color-subdue size-h6">{{ $start.Format "Jan 2" }} · <span {{ toRelativeTime $start }}></span></div>
-              </div>
+              {{ $later := $season.JSON.Array (printf "leagues.0.calendar.#(startDate>\"%s\")#" $now) }}
+              {{ $n := 0 }}
+              <ul class="dl-majors">
+              {{ range $cal }}{{ if findMatch $majors (.String "label") }}{{ template "major" . }}{{ $n = add $n 1 }}{{ end }}{{ end }}
+              {{ if lt $n 4 }}{{ range $later }}{{ if findMatch $majors (.String "label") }}{{ template "major" . }}{{ end }}{{ end }}{{ end }}
+              </ul>
+            {{ end }}
+            {{ define "major" }}
+              {{ $start := .String "startDate" | parseTime "2006-01-02T15:04Z" }}
+              <li><span class="color-highlight text-truncate">{{ .String "label" }}</span><span class="dl-major-when">{{ $start.Format "Jan 2" }} · <span {{ toRelativeTime $start }}></span></span></li>
             {{ end }}
 
         - type: custom-api

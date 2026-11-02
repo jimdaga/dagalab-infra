@@ -521,3 +521,30 @@ a.dl-tile:hover, button.dl-tile:hover:not(:disabled) { background: var(--dl-tile
 .dl-standings img { width: 18px; height: 18px; object-fit: contain; }
 .dl-standings li.is-mine { color: var(--dl-warn); }
 .dl-nextmajor { padding-top: 12px; border-top: 1px solid var(--dl-line); }
+
+/* Home: game day */
+.dl-gdlist { list-style: none; padding: 0; margin: 0; display: grid; gap: 6px; }
+.dl-gd {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 7px 10px;
+    border-radius: 10px;
+    background: var(--dl-tile);
+    border: 1px solid transparent;
+    font-size: 1.3rem;
+}
+.dl-gd.is-today { border-color: hsl(40 60% 35%); }
+.dl-gd.is-live { border-color: hsl(158 50% 35%); }
+.dl-gd-logo { width: 22px; height: 22px; object-fit: contain; padding: 2px; border-radius: 50%; background: hsl(210 15% 85%); flex-shrink: 0; }
+.dl-gd-match { flex: 1; color: var(--color-text-highlight); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dl-gd-score { font-weight: 700; color: var(--color-text-highlight); font-variant-numeric: tabular-nums; }
+.dl-gd-when { font-size: 1.15rem; color: var(--color-text-subdue); white-space: nowrap; }
+
+/* Sports: majors + news */
+.dl-majors { list-style: none; padding: 0; margin: 0; display: grid; gap: 8px; }
+.dl-majors li { display: flex; justify-content: space-between; gap: 10px; font-size: 1.3rem; }
+.dl-major-when { color: var(--color-text-subdue); white-space: nowrap; font-size: 1.15rem; }
+.dl-majors li:first-child .dl-major-when { color: var(--dl-warn); }
+.dl-headline { display: flex; gap: 12px; align-items: flex-start; }
+.dl-headline img { width: 96px; aspect-ratio: 16 / 9; object-fit: cover; border-radius: 8px; flex-shrink: 0; background: var(--dl-tile); }
