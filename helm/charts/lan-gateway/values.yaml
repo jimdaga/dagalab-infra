@@ -28,6 +28,7 @@ routes:
   - { host: plex,     namespace: media,           service: plex,                          port: 32400, monitorPath: /identity }   # / is 401 without a token
   - { host: seerr,    namespace: media,           service: seerr,                         port: 5055 }
   - { host: books,    namespace: media,           service: audiobookshelf,                port: 80 }
+  - { host: wizarr,   namespace: media,           service: wizarr,                        port: 5690 }
   - { host: torrent,  namespace: media,           service: qbittorrent,                   port: 8080 }
   - { host: sonarr,   namespace: media,           service: sonarr,                        port: 8989 }
   - { host: radarr,   namespace: media,           service: radarr,                        port: 7878 }

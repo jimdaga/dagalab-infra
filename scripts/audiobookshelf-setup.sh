@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Configure Audiobookshelf: root user `jim` (password generated once into Vault secret/audiobookshelf root-password,
 # BEFORE /init, so it's never lost), libraries Audiobooks (/audiobooks/library + /audiobooks/audible, hourly scan: no
-# inotify on NFS) and Podcasts (/podcasts), a read-only `homepage` user + API key (secret/audiobookshelf homepage-key).
+# inotify on NFS) and Podcasts (/podcasts), a read-only `homepage` user + API key (secret/audiobookshelf homepage-key),
+# a `wizarr` admin user + API key for Wizarr's invites (secret/audiobookshelf wizarr-key).
 #   VAULT_TOKEN=<root or admin token> ./scripts/audiobookshelf-setup.sh
 # Idempotent. Run it before the public route (shared-gateway) exists: an uninitialised server lets anyone create root.
 set -euo pipefail
@@ -15,7 +16,7 @@ if [[ -z "$pw" ]]; then
   v kv put secret/audiobookshelf root-password="$pw" >/dev/null
   echo "generated secret/audiobookshelf root-password" >&2
 fi
-export ABS_ROOT_PASSWORD="$pw" ABS_HOMEPAGE_KEY="$(field homepage-key)"   # checked against ABS; replaced if stale
+export ABS_ROOT_PASSWORD="$pw" ABS_HOMEPAGE_KEY="$(field homepage-key)" ABS_WIZARR_KEY="$(field wizarr-key)"   # checked; replaced if stale
 
 kubectl -n media port-forward svc/audiobookshelf 13378:80 >/dev/null 2>&1 & pf=$!
 trap 'kill $pf 2>/dev/null' EXIT
@@ -26,4 +27,9 @@ key=$(sed -n 's/^HOMEPAGE_KEY=//p' <<<"$out")
 if [[ -n "$key" ]]; then
   v kv patch secret/audiobookshelf homepage-key="$key" >/dev/null
   echo "stored Audiobookshelf homepage API key in secret/audiobookshelf" >&2
+fi
+key=$(sed -n 's/^WIZARR_KEY=//p' <<<"$out")
+if [[ -n "$key" ]]; then
+  v kv patch secret/audiobookshelf wizarr-key="$key" >/dev/null
+  echo "stored Audiobookshelf wizarr API key in secret/audiobookshelf" >&2
 fi

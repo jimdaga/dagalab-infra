@@ -1,0 +1,63 @@
+# Wizarr: invite links for Jellyfin + Audiobookshelf. Public https://join.dagaflix.com/j/<code> (shared-gateway, /setup
+# blocked there), admin UI https://wizarr.lab.internal. One invite creates the person's Jellyfin account (= their Seerr
+# login) and an Audiobookshelf account with the same username/password.
+# Admin `jim` (password in Vault secret/wizarr) + both servers: scripts/wizarr-setup.sh (must run before the public route
+# exists: an uninitialised server lets anyone create the admin at /setup).
+controllers:
+  wizarr:
+    strategy: Recreate   # never two instances on one SQLite DB
+    # no securityContext: the entrypoint starts as root, chowns /data/database and drops to PUID/PGID 1000 (su-exec)
+    containers:
+      app:
+        image:
+          repository: ghcr.io/wizarrrr/wizarr
+          tag: v2026.10.1
+        env:
+          TZ: America/New_York
+          # behind Envoy: real client IP for its per-IP rate limits, https for generated links (one proxy hop)
+          TRUST_PROXY_HEADERS: "true"
+          PROXY_FIX_X_FOR: "1"
+          PROXY_FIX_X_PROTO: "1"
+          PROXY_FIX_X_HOST: "1"
+        probes:
+          liveness: &probe
+            enabled: true
+            custom: true
+            spec:
+              httpGet:
+                path: /health
+                port: 5690
+              periodSeconds: 30
+              failureThreshold: 5
+          readiness: *probe
+          startup:   # DB migrations run before gunicorn starts
+            enabled: true
+            custom: true
+            spec:
+              httpGet:
+                path: /health
+                port: 5690
+              periodSeconds: 10
+              failureThreshold: 30
+        resources:
+          requests:
+            cpu: 50m
+            memory: 256Mi
+          limits:
+            memory: 1Gi
+
+service:
+  app:
+    controller: wizarr
+    ports:
+      http:
+        port: 5690
+
+persistence:
+  # /data/database: SQLite DB, sessions, secrets.json (Flask secret key); /data/wizard_steps. Longhorn, never NFS
+  data:
+    type: persistentVolumeClaim
+    accessMode: ReadWriteOnce
+    size: 1Gi
+    globalMounts:
+      - path: /data

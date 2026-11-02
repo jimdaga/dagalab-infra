@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Idempotent Audiobookshelf setup over its API (port-forward on 127.0.0.1:13378). Called by audiobookshelf-setup.sh.
-Env: ABS_ROOT_PASSWORD, ABS_HOMEPAGE_KEY (the key in Vault, may be empty). Prints HOMEPAGE_KEY=... when it creates one
-(no key yet, or the stored one no longer works, e.g. after a rebuilt config volume)."""
+Env: ABS_ROOT_PASSWORD, ABS_HOMEPAGE_KEY, ABS_WIZARR_KEY (the keys in Vault, may be empty). Prints HOMEPAGE_KEY=... /
+WIZARR_KEY=... when it creates one (no key yet, or the stored one no longer works, e.g. after a rebuilt config volume)."""
 import json, os, secrets, sys, urllib.error, urllib.request
 
 U = 'http://127.0.0.1:13378'
@@ -76,3 +76,25 @@ if not stored or call('GET', '/api/libraries', tok=stored)[0] != 200:
     log('api key homepage: created' + (' (stored key was rejected)' if stored else ''))
 else:
     log('api key homepage: in Vault and valid')
+
+# 4) `wizarr` admin user + API key: Wizarr creates invited people's accounts (admins can create users, not admins/root)
+st, r = call('GET', '/api/users', tok=tok)
+user = next((u for u in r['users'] if u['username'] == 'wizarr'), None)
+if user is None:
+    st, r = call('POST', '/api/users', {'username': 'wizarr', 'password': secrets.token_urlsafe(32), 'type': 'admin',
+                                        'isActive': True}, tok=tok)
+    if st != 200:
+        sys.exit(f'create wizarr user failed: {st} {r}')
+    user = r['user']
+    log('user wizarr: created (admin)')
+else:
+    log('user wizarr: present')
+stored = os.environ.get('ABS_WIZARR_KEY', '')
+if not stored or call('GET', '/api/users', tok=stored)[0] != 200:   # admin-only endpoint
+    st, r = call('POST', '/api/api-keys', {'name': 'wizarr', 'userId': user['id'], 'isActive': True}, tok=tok)
+    if st != 200:
+        sys.exit(f'create API key failed: {st} {r}')
+    print(f"WIZARR_KEY={r['apiKey']['apiKey']}")
+    log('api key wizarr: created' + (' (stored key was rejected)' if stored else ''))
+else:
+    log('api key wizarr: in Vault and valid')

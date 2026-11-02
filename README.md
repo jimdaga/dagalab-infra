@@ -88,6 +88,7 @@ Two zones, two owners:
 | 0 | jellyfin | Media server: library read-only from `media-data`, Quick Sync via the GPU plugin; `https://` and plain `http://jellyfin.lab.internal` |
 | 0 | seerr | Request UI (Jellyfin sign-in) → Radarr/Sonarr; public `https://requests.dagaflix.com`, LAN `https://seerr.lab.internal` |
 | 0 | audiobookshelf | Audiobooks + podcasts server; public `https://books.dagaflix.com`, LAN `https://books.lab.internal` |
+| 0 | wizarr | Invite links: one invite = Jellyfin + Audiobookshelf account; LAN admin `https://wizarr.lab.internal` |
 | 0 | bookshelf | Audiobook manager (Readarr fork) → `audiobooks` share `library/`; `https://bookshelf.lab.internal`; hourly `seed-cleanup` CronJob |
 | 0 | libation | Nightly CronJob: Audible library → `audiobooks` share `audible/` |
 | 0 | radarr | Movies → `/data/movies`; config on Longhorn, API key from Vault |
@@ -117,6 +118,7 @@ ingress-nginx was retired in March 2026, and Gateway API is where things are hea
 | `jellyfin.lab.internal` | Jellyfin (also plain `http://` for TV apps) |
 | `seerr.lab.internal` | Seerr (requests) |
 | `books.lab.internal` | Audiobookshelf (audiobooks + podcasts) |
+| `wizarr.lab.internal` | Wizarr (invites; admin `jim`, password in Vault `secret/wizarr`) |
 | `bookshelf.lab.internal` | Bookshelf (audiobook requests) |
 | `homepage.lab.internal` | Homepage: dashboard linking everything below, with cluster/node CPU+memory and pod status (read-only ClusterRole), Longhorn usage, Sonarr/Radarr release calendar, VPN status (Gluetun control server, API key from Vault `secret/gluetun`). Config in `argocd/apps/homepage/values.yaml` |
 | `homarr.lab.internal` | Homarr (trial): same services as Homepage as a drag-and-drop board with live integrations (Jellyfin now playing, Seerr requests, calendar incl. Bookshelf, downloads, VPN, Prowlarr, Bazarr, missing media; Audiobookshelf as a link tile only, since Homarr's audio stats widget needs an Audiobookshelf admin key; NAS health/volumes/resource charts and UniFi summary + Wi-Fi/wired clients and a Home Assistant integration on Platform, via Homepage's `homepage` device accounts: UCG over HTTPS with its self-signed cert trusted + pinned to the IP, DSM over HTTP :5000 on the lab VLAN since its cert's CA isn't served). Config is in its SQLite DB on Longhorn, **not** in git; seeded by `scripts/homarr-setup.sh` (admin `jim`, password + API key in Vault `secret/homarr`); `scripts/homarr-board.py` lays out four boards shown as header tabs (Home, Library, Downloads, Platform; re-runnable, resets UI edits) |
@@ -198,7 +200,7 @@ Deploy order, so Jellyfin scans an already clean, ID-tagged library once:
    - **Decluttarr**: every 10 min removes stalled (2h, no connections), failed, metadata-stuck and orphaned downloads so the *arr apps grab an alternative, and searches 3 missing items per run (each at most weekly). Private-tracker torrents are removed outright (a stalled one would hold a download slot forever). Tag a torrent `Keep` in qBittorrent to protect it. Ran in `test_run` mode first; live since 2026-10-14.
    - **Monitoring**: Exportarr sidecars (Sonarr/Radarr/Prowlarr/Bazarr) + Unpackerr metrics → Prometheus; Grafana dashboards "Media: pipeline overview" and "Media: Sonarr / Radarr / Prowlarr (Exportarr)"; alert rules in `helm/charts/media-monitoring/files/rules.yaml`. Alertmanager has no receiver yet (Discord TODO), so alerts only show in Grafana/Alertmanager.
    - **Notifications** (Discord server `dagalab`; webhook URLs in Vault `secret/discord` keys `webhook-alerts`, `webhook-media`, `webhook-media-noise`, synced as Secret `discord` to `monitoring` and `media`). Each event goes to one channel. **#alerts**: Alertmanager (all alerts, resolved too; Watchdog/InfoInhibitor dropped) + Sonarr/Radarr "manual import needed". **#media**: Sonarr release imported, Radarr movie imported, Seerr requests (pending, auto-approved, failed) and issues, Jellyfin watch activity (someone started or finished a movie/episode; Webhook plugin, home videos excluded). **#media-noise**: grabs, upgrades, deletions, Bazarr subtitle downloads. App side applied by `scripts/notify-setup.sh [--test]`; *arr health, indexer and Unpackerr failures come only from Alertmanager.
-   - Setup order after a rebuild: `vault-bootstrap.sh` → `arr-run.sh arr-wire.py` → `jellyfin-setup.sh` → `seerr-setup.sh` → `bazarr-setup.sh` → `audiobookshelf-setup.sh` (all idempotent; Recyclarr/Unpackerr/Decluttarr need nothing).
+   - Setup order after a rebuild: `vault-bootstrap.sh` → `arr-run.sh arr-wire.py` → `jellyfin-setup.sh` → `seerr-setup.sh` → `bazarr-setup.sh` → `audiobookshelf-setup.sh` → `wizarr-setup.sh` (all idempotent; Recyclarr/Unpackerr/Decluttarr need nothing).
 
 7. **Plex** (`https://plex.lab.internal`, direct `192.168.3.202:32400`): deployed 2026-10-18 for sharing Movies + TV with friends (they have Plex Pass; this server doesn't, so CPU transcoding only). Library read-only, DB on Longhorn. One-time setup (repeat only after losing the `/config` volume):
    1. Claim: `kubectl -n media port-forward svc/plex 32400:32400`, open `http://localhost:32400/web`, sign in; Plex sees localhost and offers to claim the server. No claim token in git or Vault.
@@ -216,6 +218,10 @@ Deploy order, so Jellyfin scans an already clean, ID-tagged library once:
    5. Family accounts in Audiobookshelf (Settings → Users): long random passwords, no upload/delete. Phone apps use `https://books.dagaflix.com` everywhere.
    6. UniFi DNS: `books.lab.internal`, `bookshelf.lab.internal` → 192.168.3.201.
    Requesting a book: search it in Bookshelf and add it (only that book is monitored); it appears in Audiobookshelf within the hour.
+9. **Invites: Wizarr** (`argocd/apps/wizarr`, LAN admin `https://wizarr.lab.internal`). An invite link creates the person's Jellyfin account (also their Seerr login) and an Audiobookshelf account with the same username/password, then walks them through the apps. Not SSO: a later password change in one app doesn't carry over. One-time steps (repeat only after losing its volume):
+   1. `jellyfin-setup.sh` and `audiobookshelf-setup.sh` issue its keys: Jellyfin API key `wizarr` (`secret/jellyfin` `wizarr-key`), Audiobookshelf admin user `wizarr` + key (`secret/audiobookshelf` `wizarr-key`; an admin can create users, not admins).
+   2. `VAULT_TOKEN=... scripts/wizarr-setup.sh` **before** the public route exists: `/setup` lets anyone create the admin on a fresh server. Creates admin `jim` (Vault `secret/wizarr`), adds both servers (in-cluster URLs; invitees are sent to `popcorn`/`books.dagaflix.com`) and enables all their libraries. Narrow libraries per invite in the UI.
+   3. UniFi DNS: `wizarr.lab.internal` → 192.168.3.201.
 
 ## UPS / power
 

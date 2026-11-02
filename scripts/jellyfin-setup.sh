@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Configure Jellyfin (first-run, Quick Sync, libraries + trickplay options, API keys) and keep its credentials in Vault.
-#   VAULT_TOKEN=<root or admin token> ./scripts/jellyfin-setup.sh [--rotate=homepage|seerr|arr]
-# secret/jellyfin: admin-user, admin-password (generated once), homepage-key, seerr-key, arr-key.
+#   VAULT_TOKEN=<root or admin token> ./scripts/jellyfin-setup.sh [--rotate=homepage|seerr|arr|wizarr]
+# secret/jellyfin: admin-user, admin-password (generated once), homepage-key, seerr-key, arr-key, wizarr-key.
 set -euo pipefail
 : "${VAULT_TOKEN:?}"
 v() { kubectl -n vault exec -i vault-0 -- env VAULT_TOKEN="$VAULT_TOKEN" vault "$@"; }
@@ -19,7 +19,8 @@ for _ in $(seq 1 30); do curl -s -o /dev/null http://127.0.0.1:18096/health && b
 
 keys=$(python3 "$(dirname "$0")/jellyfin-setup.py" --emit-keys "$@")   # e.g. --rotate=homepage
 hk=$(sed -n 's/^KEY_homepage=//p' <<<"$keys"); sk=$(sed -n 's/^KEY_seerr=//p' <<<"$keys"); ak=$(sed -n 's/^KEY_arr=//p' <<<"$keys")
-[[ -n "$hk" && -n "$sk" && -n "$ak" ]] || { echo "API keys missing" >&2; exit 1; }
+wk=$(sed -n 's/^KEY_wizarr=//p' <<<"$keys")
+[[ -n "$hk" && -n "$sk" && -n "$ak" && -n "$wk" ]] || { echo "API keys missing" >&2; exit 1; }
 # rewrite the whole secret so fields for revoked keys disappear
-v kv put secret/jellyfin admin-user="$JF_USER" admin-password="$JF_PASSWORD" homepage-key="$hk" seerr-key="$sk" arr-key="$ak" >/dev/null
+v kv put secret/jellyfin admin-user="$JF_USER" admin-password="$JF_PASSWORD" homepage-key="$hk" seerr-key="$sk" arr-key="$ak" wizarr-key="$wk" >/dev/null
 echo "stored Jellyfin API keys in secret/jellyfin" >&2

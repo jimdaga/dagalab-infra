@@ -180,6 +180,13 @@ configMaps:
                   type: audiobookshelf
                   url: http://audiobookshelf.media.svc.cluster.local
                   key: "{{ "{{HOMEPAGE_VAR_AUDIOBOOKSHELF_KEY}}" }}"
+            - Wizarr:
+                href: https://wizarr.lab.internal
+                icon: wizarr.png
+                description: Invites (Jellyfin + Audiobookshelf)
+                namespace: media
+                app: wizarr
+                siteMonitor: http://wizarr.media.svc.cluster.local:5690/health
             - Seerr:
                 href: https://seerr.lab.internal
                 icon: jellyseerr.png
