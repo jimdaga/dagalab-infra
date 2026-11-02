@@ -79,7 +79,10 @@ search:
     ep: "{{ if .Query.TVDBID }}{{ .Query.Ep }}{{ else }}{{ end }}"
     cat: "{{ join .Categories \",\" }}"
     extended: 1
-    limit: 100
+    # 50, not 100: wigornot's API 500s on any page containing one broken item (seen 2026-10-30, a Dorohedoro S02
+    # upload; feed position ~81), and one 500 puts the whole indexer into Prowlarr's back-off. 50 newest items still
+    # cover ~2 days of uploads, far more than an RSS interval. Back to 100 once `t=search&limit=100` returns 200.
+    limit: 50
     apikey: "{{ .Config.apikey }}"
 
   rows:
