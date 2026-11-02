@@ -1,4 +1,5 @@
-# PUBLIC gateway: the UCG forwards WAN 443 here. Only routes listed below are internet-facing (Jellyfin, Seerr, Audiobookshelf);
+# PUBLIC gateway: the UCG forwards WAN 443 here. Only routes listed below are internet-facing (Jellyfin, Seerr, Audiobookshelf,
+# Wizarr invites);
 # platform UIs stay on lan-gateway (*.lab.internal), never here.
 domain: dagaflix.com
 
@@ -21,6 +22,10 @@ certificate:
 # Audiobookshelf (books) uses its own accounts. Its POST /init creates the root user on an uninitialised server (fresh
 # install or lost config volume), so the public route 404s every spelling Express would route to it (case-insensitive,
 # optional /audiobookshelf base path, extra slashes); scripts/audiobookshelf-setup.sh inits over a port-forward.
+# Wizarr (join) is only for invitees (/j/<code>, /join, the wizard). /setup creates the admin on an uninitialised server
+# (scripts/wizarr-setup.sh does it over a port-forward) and the admin login (/login, 2FA, passkeys) is LAN-only
+# (wizarr.lab.internal), so both 404 here; admin pages then redirect to that 404. / redirects to the login, hence /join
+# for the monitor.
 # denyPathRegex (optional): RE2 regex of paths answered 404 by Envoy instead of the backend.
 # requestTimeout (optional): whole-response limit, Envoy's default is 15s. "0s" = none, for direct-play video: one ranged
 # GET carries the whole file and a cut-off one stops playback once the client's buffer runs dry (stream idle timeout still applies).
@@ -29,6 +34,8 @@ routes:
   - { name: seerr,          host: requests, namespace: media, service: seerr,          port: 5055 }
   - { name: audiobookshelf, host: books,    namespace: media, service: audiobookshelf, port: 80,
       denyPathRegex: '(?i)^(/+audiobookshelf)?/+init/*$' }
+  - { name: wizarr,         host: join,     namespace: media, service: wizarr,         port: 5690, monitorPath: /join,
+      denyPathRegex: '(?i)^/+(setup|login|complete-2fa|webauthn)([/?].*)?$' }
 
 # Every other hostname (bare domain, any made-up subdomain, the raw IP) gets this page straight from
 # Envoy, so scanners see nothing that identifies the server. The body is an Envoy format string: never

@@ -36,7 +36,7 @@ Lab VLAN 3 on the UniFi Cloud Gateway Ultra: `192.168.3.0/24`.
 | 192.168.3.100 | bastion.lab.internal: Raspberry Pi, Ubuntu (static, `scripts/host-config.sh`; tooling in `bastion/`) |
 | 192.168.3.101–199 | UniFi DHCP pool. UniFi defaults a new network to .6–.254, so shrink it to this range: fixed-IP reservations protect the four hosts, but the API VIP (.10) and the MetalLB pool have no MAC to reserve against. |
 | 192.168.3.200–229 | MetalLB pool. **Must be outside the DHCP pool.** |
-| 192.168.3.200 | Public shared gateway (`helm/charts/shared-gateway`): the UCG forwards WAN TCP 443 here. Only Jellyfin at `popcorn.dagaflix.com` and Seerr at `requests.dagaflix.com` and Audiobookshelf at `books.dagaflix.com`; every other hostname (bare domain, made-up subdomains, raw IP) gets a blank placeholder page, `www` redirects to the bare domain. Platform UIs never go on it |
+| 192.168.3.200 | Public shared gateway (`helm/charts/shared-gateway`): the UCG forwards WAN TCP 443 here. Only Jellyfin at `popcorn.dagaflix.com`, Seerr at `requests.dagaflix.com`, Audiobookshelf at `books.dagaflix.com` and Wizarr invites at `join.dagaflix.com`; every other hostname (bare domain, made-up subdomains, raw IP) gets a blank placeholder page, `www` redirects to the bare domain. Platform UIs never go on it |
 | 192.168.3.201 | LAN gateway: `https://<app>.lab.internal` (`helm/charts/lan-gateway`) |
 | 192.168.3.202 | Plex (`argocd/apps/plex`): LoadBalancer TCP 32400, `externalTrafficPolicy: Local`. The UCG forwards WAN TCP 32400 here (direct remote access for friends; not via Envoy) |
 
@@ -88,7 +88,7 @@ Two zones, two owners:
 | 0 | jellyfin | Media server: library read-only from `media-data`, Quick Sync via the GPU plugin; `https://` and plain `http://jellyfin.lab.internal` |
 | 0 | seerr | Request UI (Jellyfin sign-in) → Radarr/Sonarr; public `https://requests.dagaflix.com`, LAN `https://seerr.lab.internal` |
 | 0 | audiobookshelf | Audiobooks + podcasts server; public `https://books.dagaflix.com`, LAN `https://books.lab.internal` |
-| 0 | wizarr | Invite links: one invite = Jellyfin + Audiobookshelf account; LAN admin `https://wizarr.lab.internal` |
+| 0 | wizarr | Invite links: one invite = Jellyfin + Audiobookshelf account; public `https://join.dagaflix.com/j/<code>`, LAN admin `https://wizarr.lab.internal` |
 | 0 | bookshelf | Audiobook manager (Readarr fork) → `audiobooks` share `library/`; `https://bookshelf.lab.internal`; hourly `seed-cleanup` CronJob |
 | 0 | libation | Nightly CronJob: Audible library → `audiobooks` share `audible/` |
 | 0 | radarr | Movies → `/data/movies`; config on Longhorn, API key from Vault |
@@ -99,7 +99,7 @@ Two zones, two owners:
 | 0 | homarr | Trial alternative dashboard (homarr.dev), compared against Homepage; config lives in its DB |
 | 0 | uptime-kuma | Uptime monitors + notifications; config lives in its SQLite DB on Longhorn |
 | 5 | lan-gateway | LAN-only Envoy Gateway on 192.168.3.201: HTTPS `*.lab.internal` routes to the admin/media UIs; owns the cluster GatewayClass |
-| 5 | shared-gateway | Public Gateway (WAN 443), `dagaflix.com` wildcard cert, Jellyfin + Seerr routes |
+| 5 | shared-gateway | Public Gateway (WAN 443), `dagaflix.com` wildcard cert, Jellyfin + Seerr + Audiobookshelf + Wizarr routes |
 
 metrics-server is bundled by RKE2, so it isn't listed here. RKE2's bundled ingress-nginx is disabled.
 
@@ -218,7 +218,7 @@ Deploy order, so Jellyfin scans an already clean, ID-tagged library once:
    5. Family accounts in Audiobookshelf (Settings → Users): long random passwords, no upload/delete. Phone apps use `https://books.dagaflix.com` everywhere.
    6. UniFi DNS: `books.lab.internal`, `bookshelf.lab.internal` → 192.168.3.201.
    Requesting a book: search it in Bookshelf and add it (only that book is monitored); it appears in Audiobookshelf within the hour.
-9. **Invites: Wizarr** (`argocd/apps/wizarr`, LAN admin `https://wizarr.lab.internal`). An invite link creates the person's Jellyfin account (also their Seerr login) and an Audiobookshelf account with the same username/password, then walks them through the apps. Not SSO: a later password change in one app doesn't carry over. One-time steps (repeat only after losing its volume):
+9. **Invites: Wizarr** (`argocd/apps/wizarr`, invite links `https://join.dagaflix.com/j/<code>`, LAN admin `https://wizarr.lab.internal`; the public route 404s `/setup` and the admin login). An invite link creates the person's Jellyfin account (also their Seerr login) and an Audiobookshelf account with the same username/password, then walks them through the apps. Not SSO: a later password change in one app doesn't carry over. One-time steps (repeat only after losing its volume):
    1. `jellyfin-setup.sh` and `audiobookshelf-setup.sh` issue its keys: Jellyfin API key `wizarr` (`secret/jellyfin` `wizarr-key`), Audiobookshelf admin user `wizarr` + key (`secret/audiobookshelf` `wizarr-key`; an admin can create users, not admins).
    2. `VAULT_TOKEN=... scripts/wizarr-setup.sh` **before** the public route exists: `/setup` lets anyone create the admin on a fresh server. Creates admin `jim` (Vault `secret/wizarr`), adds both servers (in-cluster URLs; invitees are sent to `popcorn`/`books.dagaflix.com`) and enables all their libraries. Narrow libraries per invite in the UI.
    3. UniFi DNS: `wizarr.lab.internal` → 192.168.3.201.
