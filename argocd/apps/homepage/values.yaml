@@ -175,7 +175,7 @@ configMaps:
                 description: Live TV channels (watch in Jellyfin Live TV)
                 namespace: media
                 app: ersatztv
-                siteMonitor: http://ersatztv.media.svc.cluster.local:8409/
+                siteMonitor: http://ersatztv.media.svc.cluster.local:8409/health
             - Audiobookshelf:
                 href: https://books.lab.internal
                 icon: audiobookshelf.png
