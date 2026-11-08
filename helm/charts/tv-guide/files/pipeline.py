@@ -62,10 +62,14 @@ def still_cmd(ass_path, png_path, height, fonts_dir):
 
 def ffmpeg_cmd(segments, music, frame_png, strip_png, overlay_ass, fonts_dir, seconds, scroll):
     """scroll = (offset at t=0, cycle) of the grid strip, in pixels."""
+    def still(path, fallback):
+        # a failed still render must not kill the stream: a plain background instead
+        return (['-loop', '1', '-framerate', str(FPS), '-i', path] if os.path.exists(path)
+                else ['-f', 'lavfi', '-i', f'color=c={fallback}:r={FPS}'])
+    offset, cycle = scroll
     cmd = ['ffmpeg', '-hide_banner', '-loglevel', 'error', '-nostdin',
            '-init_hw_device', 'qsv=hw', '-filter_hw_device', 'hw',
-           '-loop', '1', '-framerate', str(FPS), '-i', frame_png,
-           '-loop', '1', '-framerate', str(FPS), '-i', strip_png]
+           *still(frame_png, '0x06106B:s=1920x1080'), *still(strip_png, f'0x000000:s=1920x{GRID_VISIBLE + cycle}')]
     for s in segments:
         if s.kind == 'clip':
             cmd += ['-ss', f'{s.offset:.1f}', '-t', str(SEGMENT_S), '-i', s.path]
@@ -75,12 +79,14 @@ def ffmpeg_cmd(segments, music, frame_png, strip_png, overlay_ass, fonts_dir, se
             cmd += ['-f', 'lavfi', '-t', str(SEGMENT_S), '-i', f'color=c=black:s=1280x540:r={FPS}']
     first = 2
     music_idx = first + len(segments)
-    cmd += ['-stream_loop', '-1', '-ss', f'{music[1]:.1f}', '-i', music[0]]
+    if os.access(music[0], os.R_OK):
+        cmd += ['-stream_loop', '-1', '-ss', f'{music[1]:.1f}', '-i', music[0]]
+    else:                                                  # music renamed/moved: silence, not a dead channel
+        cmd += ['-f', 'lavfi', '-i', 'anullsrc=channel_layout=stereo:sample_rate=48000']
     chains = [f'[{first + i}:v:0]scale=1280:540:force_original_aspect_ratio=decrease,pad=1280:540:-1:-1:color=black,'
               f'setsar=1,fps={FPS},format=yuv420p,tpad=stop_mode=clone:stop_duration={SEGMENT_S},'
               f'trim=duration={SEGMENT_S},setpts=PTS-STARTPTS[s{i}]' for i in range(len(segments))]
     joined = ''.join(f'[s{i}]' for i in range(len(segments)))
-    offset, cycle = scroll
     graph = ';'.join(chains + [
         f'{joined}concat=n={len(segments)}:v=1:a=0[promo]',
         f"[1:v]crop=1920:{GRID_VISIBLE}:0:'mod({offset}+{SCROLL_PX_PER_S}*t,{cycle})'[grid]",

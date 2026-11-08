@@ -1,3 +1,3 @@
-# TV Guide channel: no workload of its own. ErsatzTV (argocd/apps/ersatztv) mounts these ConfigMaps and runs
-# files/render.py as a remote-stream script while someone watches channel 1. Edit files/, streams/ or fonts/.
+# TV Guide channel: no workload of its own. ErsatzTV's pod (argocd/apps/ersatztv) mounts these ConfigMaps; its
+# tv-guide sidecar serves files/server.py, which runs files/render.py while someone watches channel 1.
 {}

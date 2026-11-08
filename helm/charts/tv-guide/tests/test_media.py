@@ -59,8 +59,9 @@ class MediaTest(unittest.TestCase):
         n = len(op.calls)
         # cached on disk: a fresh Library (next 60-s item = new process) makes no calls
         lib2 = self.lib(op)
-        self.assertEqual(lib2.path_for(MOVIE), ('/data/movies/HA3.mkv', 6153.189))
-        self.assertEqual(lib2.path_for(EPISODE), ('/data/tv/s01e01.mkv', 1336.491))
+        yes = lambda path: True
+        self.assertEqual(lib2.path_for(MOVIE, exists=yes), ('/data/movies/HA3.mkv', 6153.189))
+        self.assertEqual(lib2.path_for(EPISODE, exists=yes), ('/data/tv/s01e01.mkv', 1336.491))
         self.assertEqual(len(op.calls), n)
 
     def test_auth_header(self):
@@ -74,6 +75,23 @@ class MediaTest(unittest.TestCase):
     def test_lookup_miss_and_error(self):
         self.assertIsNone(self.lib(FakeOpener({'IncludeItemTypes=Movie': {'Items': []}})).path_for(MOVIE))
         self.assertIsNone(self.lib(FakeOpener({'Items': urllib.error.URLError('down')})).path_for(EPISODE))
+
+    def test_stale_hit_is_looked_up_again(self):
+        # Review Important 4: a quality upgrade renames the file; don't keep pointing at the old path
+        op = FakeOpener(ROUTES)
+        lib = self.lib(op)
+        lib.paths[f'{MOVIE.title}|{MOVIE.year}'] = ['/data/movies/old-name.mkv', 1.0, 0]
+        self.assertEqual(lib.path_for(MOVIE, exists=lambda p: p != '/data/movies/old-name.mkv'), ('/data/movies/HA3.mkv', 6153.189))
+
+    def test_miss_expires(self):
+        clock = [1000.0]
+        op = FakeOpener({'IncludeItemTypes=Movie': {'Items': []}})
+        lib = md.Library('http://jf', 'KEY', self.tmp, opener=op, clock=lambda: clock[0])
+        self.assertIsNone(lib.path_for(MOVIE))
+        n = len(op.calls)
+        self.assertIsNone(lib.path_for(MOVIE)); self.assertEqual(len(op.calls), n)      # cached miss
+        clock[0] += md.MISS_TTL_S + 1
+        self.assertIsNone(lib.path_for(MOVIE)); self.assertGreater(len(op.calls), n)    # retried after the TTL
 
     def test_clip_offset_range(self):
         for dur in (1320.0, 6000.0):

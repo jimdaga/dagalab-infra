@@ -51,8 +51,12 @@ class PipelineTest(unittest.TestCase):
 
     def test_cmd_core(self):
         segs = [pl.Segment('clip', '/data/tv/a.mkv', 300.0), pl.Segment('image', '/c/p.jpg', 0.0), pl.Segment('blank', None, 0.0)]
-        cmd = pl.ffmpeg_cmd(segs, ('/data/m.mp3', 12.5), '/c/frame.png', '/c/strip.png', '/c/overlay.ass',
-                            '/tv-guide/fonts', 60, (12.0, 216))
+        with tempfile.TemporaryDirectory() as d:
+            for f in ('m.mp3', 'frame.png', 'strip.png'):
+                pathlib.Path(d, f).touch()
+            cmd = pl.ffmpeg_cmd(segs, (f'{d}/m.mp3', 12.5), f'{d}/frame.png', f'{d}/strip.png', '/c/overlay.ass',
+                                '/tv-guide/fonts', 60, (12.0, 216))
+        cmd = [a.replace(d, '/c') if a.startswith(d) else a for a in cmd]
         s = ' '.join(cmd)
         for want in ('-init_hw_device qsv=hw', '-c:v h264_qsv', '-t 60', '-f mpegts', 'pipe:1'):
             self.assertIn(want, s)
@@ -65,8 +69,8 @@ class PipelineTest(unittest.TestCase):
         self.assertIn('concat=n=3:v=1:a=0', fc)
         self.assertIn('-ss 300.0 -t 10 -i /data/tv/a.mkv', s)
         self.assertIn('-loop 1 -framerate 30 -t 10 -i /c/p.jpg', s)
-        self.assertIn('-stream_loop -1 -ss 12.5 -i /data/m.mp3', s)
-        self.assertEqual(args_after(cmd, '-map'), ['[v]', f'{inputs.index("/data/m.mp3")}:a:0'])  # never the clips' audio
+        self.assertIn('-stream_loop -1 -ss 12.5 -i /c/m.mp3', s)
+        self.assertEqual(args_after(cmd, '-map'), ['[v]', f'{inputs.index("/c/m.mp3")}:a:0'])  # never the clips' audio
 
     def test_still_cmd(self):
         cmd = pl.still_cmd('/c/strip.ass', '/c/strip.png', 648, '/tv-guide/fonts')
@@ -75,6 +79,16 @@ class PipelineTest(unittest.TestCase):
         self.assertIn('ass=filename=/c/strip.ass:fontsdir=/tv-guide/fonts', s)
         self.assertIn('-frames:v 1', s)
         self.assertEqual(cmd[-1], '/c/strip.png')
+
+    def test_missing_music_and_stills_fall_back(self):
+        # Review Important 3: a renamed music file or a failed still must not kill the stream
+        cmd = pl.ffmpeg_cmd([pl.Segment('blank', None, 0.0)], ('/nonexistent/m.mp3', 1.0), '/nonexistent/frame.png',
+                            '/nonexistent/strip.png', '/c/o.ass', '/f', 60, (0.0, 108))
+        s = ' '.join(cmd)
+        self.assertIn('anullsrc=channel_layout=stereo:sample_rate=48000', s)
+        self.assertNotIn('/nonexistent/', s)
+        self.assertIn('color=c=0x06106B:s=1920x1080', s)       # frame fallback
+        self.assertIn('color=c=0x000000:s=1920x594', s)         # strip fallback: crop window (486) + one cycle
 
     def test_segments_clip(self):
         with tempfile.NamedTemporaryFile() as f:

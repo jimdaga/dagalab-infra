@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """TV Guide channel: write --seconds of the Prevue-style guide to stdout as MPEG-TS.
 
-Run by ErsatzTV as the `script:` of a remote stream (helm/charts/tv-guide/streams/tv-guide.yml) inside its own pod,
-once per 60-second item while someone watches channel 1; ErsatzTV kills it when they stop. Never fails before ffmpeg
-starts: no listings or no Jellyfin still give a full-length stream.
+Started by the tv-guide sidecar (server.py) once per 60-second item while someone watches channel 1, and killed when
+ErsatzTV stops reading. Never fails before ffmpeg starts: no listings, no Jellyfin, no music file or a failed still
+still give a full-length stream.
 """
 import argparse, json, os, shutil, subprocess, sys, time, urllib.request
 from datetime import datetime, timezone
@@ -16,28 +16,50 @@ XMLTV_URL = 'http://127.0.0.1:8409/iptv/xmltv.xml'
 SECRETS = '/config/jellyfin-secrets.json'          # ErsatzTV's own Jellyfin connection (read-only)
 CACHE = Path(os.environ.get('TVG_CACHE_DIR', '/transcode/tv-guide'))
 FONTS = os.environ.get('TVG_FONTS_DIR', '/tv-guide/fonts')
+LOOKUP_BUDGET_S = 3        # clip/poster lookups per item; after that, remaining promos are posters/blank
+ITEM_S = 60                # ErsatzTV schedules the guide as 60-s items on minute boundaries
+SNAP_S = 10
+
+
+def anchor(now):
+    """The time this render stands for. A request within SNAP_S of a minute boundary is the next 60-s item (ErsatzTV
+    asks a little early or late): time it from the boundary so scroll, promos, clock and music join up seamlessly.
+    Anything else is someone tuning in mid-item: real time."""
+    b = datetime.fromtimestamp(round(now.timestamp() / ITEM_S) * ITEM_S, now.tzinfo)
+    return b if abs((now - b).total_seconds()) <= SNAP_S else now
 
 
 class Guarded:
-    """Library wrapper: any error looking up a clip or poster means "none", never a dead stream."""
-    def __init__(self, lib):
-        self.lib = lib
+    """Library wrapper so lookups can never hold up or kill the stream: any error means "none", the first clip-lookup
+    error stops further clip lookups (Jellyfin is down or hanging), and nothing is looked up once `budget_s` is spent."""
+    def __init__(self, lib, budget_s=LOOKUP_BUDGET_S, clock=time.monotonic):
+        self.lib, self.clock = lib, clock
+        self.deadline = clock() + budget_s
+        self.jellyfin_down = False
+
+    def _call(self, fn, p):
+        if self.clock() > self.deadline:
+            return None
+        try:
+            return fn(p)
+        except Exception:
+            return None
 
     def path_for(self, p):
+        if self.jellyfin_down or self.clock() > self.deadline:
+            return None
         try:
             return self.lib.path_for(p)
         except Exception:
+            self.jellyfin_down = True
             return None
 
     def poster_for(self, p):
-        try:
-            return self.lib.poster_for(p)
-        except Exception:
-            return None
+        return self._call(self.lib.poster_for, p)
 
 
 def plan(now, xmltv, library, cache_dir, seconds=60):
-    """({file name: ASS document}, [still render argv], main ffmpeg argv) for `seconds` starting at `now`."""
+    """({file name: ASS document}, [still render argv], build() -> main ffmpeg argv) for `seconds` from `now`."""
     error, progs = None, []
     try:
         progs = listings.parse_xmltv(xmltv) if xmltv else None
@@ -53,9 +75,11 @@ def plan(now, xmltv, library, cache_dir, seconds=60):
     stills = [pipeline.still_cmd(f'{d}/frame.ass', f'{d}/frame.png', screen.H, FONTS),
               pipeline.still_cmd(f'{d}/strip.ass', f'{d}/strip.png', height, FONTS)]
     segments = pipeline.segments_for(promos, Guarded(library), now, seconds)
-    argv = pipeline.ffmpeg_cmd(segments, pipeline.music_for(now), f'{d}/frame.png', f'{d}/strip.png',
-                               f'{d}/overlay.ass', FONTS, seconds, (screen.scroll_offset(cycle, now, 0), cycle))
-    return assets, stills, argv
+
+    def build():   # after the stills ran: ffmpeg_cmd falls back for any still that didn't render
+        return pipeline.ffmpeg_cmd(segments, pipeline.music_for(now), f'{d}/frame.png', f'{d}/strip.png',
+                                   f'{d}/overlay.ass', FONTS, seconds, (screen.scroll_offset(cycle, now, 0), cycle))
+    return assets, stills, build
 
 
 def _fetch_xmltv():
@@ -88,11 +112,15 @@ def main(argv=None):
             pass
     work = CACHE / f'run-{os.getpid()}'
     work.mkdir(exist_ok=True)
-    assets, stills, cmd = plan(datetime.now(timezone.utc), _fetch_xmltv(), _library(), work, args.seconds)
+    assets, stills, build = plan(anchor(datetime.now(timezone.utc)), _fetch_xmltv(), _library(), work, args.seconds)
     for name, text in assets.items():
         (work / name).write_text(text)
     for still in stills:
-        subprocess.run(still, check=False, timeout=20, stdout=subprocess.DEVNULL)
+        try:
+            subprocess.run(still, check=False, timeout=20, stdout=subprocess.DEVNULL)
+        except subprocess.TimeoutExpired:
+            pass
+    cmd = build()
     os.execvp(cmd[0], cmd)
 
 

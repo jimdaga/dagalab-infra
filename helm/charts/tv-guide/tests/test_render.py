@@ -20,7 +20,8 @@ class Down:
 
 class RenderTest(unittest.TestCase):
     def test_plan_without_listings(self):
-        assets, stills, argv = rd.plan(NOW, None, Down(), '/c', 60)
+        assets, stills, build = rd.plan(NOW, None, Down(), '/c', 60)
+        argv = build()
         self.assertIn('LISTINGS UNAVAILABLE', assets['strip.ass'])
         self.assertEqual(sorted(assets), ['frame.ass', 'overlay.ass', 'strip.ass'])
         self.assertEqual([c[-1] for c in stills], ['/c/frame.png', '/c/strip.png'])
@@ -32,7 +33,8 @@ class RenderTest(unittest.TestCase):
         self.assertIn('LISTINGS UNAVAILABLE', assets['strip.ass'])
 
     def test_plan_with_listings_library_down(self):
-        assets, _, argv = rd.plan(NOW, (HERE / 'xmltv.xml').read_text(), Down(), '/c', 60)
+        assets, _, build = rd.plan(NOW, (HERE / 'xmltv.xml').read_text(), Down(), '/c', 60)
+        argv = build()
         self.assertIn('NOW ON', assets['overlay.ass'])
         self.assertNotIn('LISTINGS UNAVAILABLE', assets['strip.ass'])
         self.assertEqual(argv.count('color=c=black:s=1280x540:r=30'), 6)   # library errors -> blank promos
@@ -40,3 +42,39 @@ class RenderTest(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class AnchorTest(unittest.TestCase):
+    """Review Important 1: items are 60 s on minute boundaries; time them from the boundary, not the request."""
+    def test_late_and_early_requests_snap_to_the_boundary(self):
+        b = datetime(2026, 11, 8, 16, 12, 0, tzinfo=EST)
+        self.assertEqual(rd.anchor(b + timedelta(seconds=2.9)), b)
+        self.assertEqual(rd.anchor(b - timedelta(seconds=3)), b)
+
+    def test_mid_item_join_keeps_real_time(self):
+        t = datetime(2026, 11, 8, 16, 11, 37, tzinfo=EST)
+        self.assertEqual(rd.anchor(t), t)
+
+
+class BudgetTest(unittest.TestCase):
+    """Review Important 2: a hanging Jellyfin must not hold up the stream."""
+    def test_first_failure_stops_further_lookups(self):
+        calls = []
+        class Fails:
+            def path_for(self, p): calls.append('path'); raise OSError('timeout')
+            def poster_for(self, p): calls.append('poster'); return '/c/p.jpg'
+        g = rd.Guarded(Fails(), budget_s=3)
+        self.assertIsNone(g.path_for(None))
+        self.assertIsNone(g.path_for(None))
+        self.assertEqual(g.poster_for(None), '/c/p.jpg')     # posters come from ErsatzTV, not Jellyfin
+        self.assertEqual(calls, ['path', 'poster'])
+
+    def test_budget_spent_skips_lookups(self):
+        clock = [0.0]
+        class Slow:
+            def path_for(self, p): clock[0] += 4; return ('/x.mkv', 10.0)
+            def poster_for(self, p): clock[0] += 4; return '/p.jpg'
+        g = rd.Guarded(Slow(), budget_s=3, clock=lambda: clock[0])
+        self.assertEqual(g.path_for(None), ('/x.mkv', 10.0))
+        self.assertIsNone(g.path_for(None))
+        self.assertIsNone(g.poster_for(None))

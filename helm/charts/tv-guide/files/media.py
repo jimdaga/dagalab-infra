@@ -1,8 +1,9 @@
 """Where a promo's clip comes from: the programme's media file (via Jellyfin, same /data paths) or its poster."""
-import hashlib, json, urllib.parse, urllib.request
+import hashlib, json, os, tempfile, time, urllib.parse, urllib.request
 from pathlib import Path
 
 TIMEOUT = 5
+MISS_TTL_S = 3600          # a title Jellyfin hadn't scanned yet gets looked up again after this
 
 
 def clip_offset(duration_s, slot_seed):
@@ -12,8 +13,8 @@ def clip_offset(duration_s, slot_seed):
 
 
 class Library:
-    def __init__(self, base_url, api_key, cache_dir, opener=urllib.request.urlopen):
-        self.base, self.key, self.cache, self.open = base_url.rstrip('/'), api_key, Path(cache_dir), opener
+    def __init__(self, base_url, api_key, cache_dir, opener=urllib.request.urlopen, clock=time.time):
+        self.base, self.key, self.cache, self.open, self.clock = base_url.rstrip('/'), api_key, Path(cache_dir), opener, clock
         self.cache.mkdir(parents=True, exist_ok=True)
         self.paths_file = self.cache / 'paths.json'
         try:
@@ -40,21 +41,23 @@ class Library:
         movies = self._get('/Items', IncludeItemTypes='Movie', Recursive='true', SearchTerm=p.title, Fields='Path')['Items']
         return next((m for m in movies if m['Name'] == p.title and (p.year is None or m.get('ProductionYear') == p.year)), None)
 
-    def path_for(self, p):
-        """(path, duration in seconds) of the programme's file, or None. Hits and misses are cached on disk."""
+    def path_for(self, p, exists=lambda path: os.access(path, os.R_OK)):
+        """(path, duration in seconds) of the programme's file, or None. Cached on disk: hits until the file is gone
+        (Sonarr/Radarr upgrades rename files), misses for MISS_TTL_S."""
         key = f'{p.title}|{p.episode or p.year}'
-        if key not in self.paths:
+        hit = self.paths.get(key)
+        stale = (hit is None and key in self.paths) or (isinstance(hit, dict) and self.clock() - hit['miss'] > MISS_TTL_S) \
+            or (isinstance(hit, list) and not exists(hit[0]))
+        if key not in self.paths or stale:
             try:
                 item = self._lookup(p)
             except Exception:
                 return None                   # Jellyfin down: don't cache, try again next item
-            self.paths[key] = [item['Path'], item['RunTimeTicks'] / 1e7] if item and item.get('Path') else None
-            try:
-                self.paths_file.write_text(json.dumps(self.paths))
-            except OSError:
-                pass
+            self.paths[key] = [item['Path'], item['RunTimeTicks'] / 1e7] if item and item.get('Path') and item.get('RunTimeTicks') \
+                else {'miss': self.clock()}
+            _write_atomic(self.paths_file, json.dumps(self.paths).encode())
         hit = self.paths[key]
-        return (hit[0], hit[1]) if hit else None
+        return (hit[0], hit[1]) if isinstance(hit, list) else None
 
     def poster_for(self, p):
         if not p.poster_url:
@@ -65,8 +68,19 @@ class Library:
         try:
             with self.open(urllib.request.Request(p.poster_url), timeout=TIMEOUT) as r:
                 data = r.read()
-            f.parent.mkdir(parents=True, exist_ok=True)
-            f.write_bytes(data)
-            return str(f)
+            _write_atomic(f, data)
+            return str(f) if f.exists() else None
         except Exception:
             return None
+
+
+def _write_atomic(path, data):
+    """Concurrent renders (two viewers, a probe during playback) must never read a half-written file."""
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        fd, tmp = tempfile.mkstemp(dir=path.parent)
+        with os.fdopen(fd, 'wb') as f:
+            f.write(data)
+        os.replace(tmp, path)
+    except OSError:
+        pass
