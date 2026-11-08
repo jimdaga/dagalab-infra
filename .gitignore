@@ -58,3 +58,4 @@ vault-init*.json
 
 # RKE2 node configs with the real token filled in
 cluster/rke2/*.local.yaml
+.superpowers/
