@@ -237,7 +237,7 @@ Deploy order, so Jellyfin scans an already clean, ID-tagged library once:
       | 25 | Christmas | `type:movie AND tag:christmas` (TMDB keyword via Jellyfin, so new Christmas movies join on their own), Shuffle, Flood |
       | 30 | Premiere | `type:movie AND released_inthelast:"3 years" AND NOT tag:christmas` (rolling), Shuffle, Flood |
       | 40 | Road Trip | Television Show items Parts Unknown, Top Gear, The Grand Tour, Ramsay's Kitchen Nightmares; Chronological, One each, in turn |
-      | 80 | Throwback Theater | `type:movie AND release_date:[1900-01-01 TO 1999-12-31] AND NOT genre:horror AND NOT tag:christmas`, Shuffle, Flood |
+      | 80 | Throwback Theater | `type:movie AND release_date:[1900-01-01 TO 1999-12-31] AND NOT genre:horror AND NOT tag:christmas AND NOT title:"Song of the South"`, Shuffle, Flood |
       | 90 | 90s Rewind | Television Show items The Simpsons, South Park, Freaks and Geeks; Chronological, One each, in turn (a smart collection with Shuffle In Order played them in proportion to episode count) |
 
       Watermarks: one "retro badge" PNG per channel in `argocd/apps/ersatztv/watermarks/` (`<number>.png`, rendered from `badges.html` with Playwright `element.screenshot({omitBackground: true})`). ErsatzTV → Watermarks → "Badge - <channel>": Permanent, Custom image (upload the PNG), BottomRight, place within source content, width % = png width × 46 / 82 / 1920 × 100 (same on-screen height for every badge), margins 3 % / 4 %, opacity 85 %; then pick it in each channel's Watermark field. Jellyfin caches the XMLTV for about an hour: a new channel's listings show after the next guide refresh after that.
