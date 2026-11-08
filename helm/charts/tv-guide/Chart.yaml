@@ -1,0 +1,5 @@
+apiVersion: v2
+name: tv-guide
+description: Prevue-style TV Guide channel for ErsatzTV (channel 1); renderer code, fonts and the remote-stream definition as ConfigMaps
+type: application
+version: 0.1.0

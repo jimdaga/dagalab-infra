@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<tv generator-info-name="ersatztv">
+<channel id="C1.100.ersatztv.org"><display-name>1 TV Guide</display-name><display-name>1</display-name><display-name>TV Guide</display-name></channel>
+<channel id="C25.199.ersatztv.org"><display-name>25 Christmas</display-name><display-name>25</display-name><display-name>Christmas</display-name></channel>
+<channel id="C90.201.ersatztv.org"><display-name>90 90s Rewind</display-name><display-name>90</display-name><display-name>90s Rewind</display-name></channel>
+<programme start="20261108150000 -0500" stop="20261108160000 -0500" channel="C1.100.ersatztv.org"><title lang="en">TV Guide</title></programme>
+<programme start="20261108140000 -0500" stop="20261108153300 -0500" channel="C25.199.ersatztv.org"><title lang="en">Home Alone 3</title><date>1997</date><category lang="en">Movie</category><icon src="http://127.0.0.1:8409/iptv/artwork/posters/jellyfin/1718"/></programme>
+<programme start="20261108153300 -0500" stop="20261108171000 -0500" channel="C25.199.ersatztv.org"><title lang="en">Bad Santa 2</title><date>2016</date><category lang="en">Movie</category><icon src="http://127.0.0.1:8409/iptv/artwork/posters/jellyfin/1720"/></programme>
+<programme start="20261108171000 -0500" stop="20261108183000 -0500" channel="C25.199.ersatztv.org"><title lang="en">Elf</title><date>2003</date><category lang="en">Movie</category></programme>
+<programme start="20261108152200 -0500" stop="20261108154400 -0500" channel="C90.201.ersatztv.org"><title lang="en">The Simpsons</title><sub-title lang="en">Simpsons Roasting on an Open Fire</sub-title><category lang="en">Series</category><icon src="http://127.0.0.1:8409/iptv/artwork/posters/jellyfin/9548"/><episode-num system="onscreen">S01E01</episode-num><episode-num system="xmltv_ns">0.0.0/1</episode-num></programme>
+<programme start="20261108155000 -0500" stop="20261108161200 -0500" channel="C90.201.ersatztv.org"><title lang="en">South Park</title><sub-title lang="en">South American Biker Gangs</sub-title><episode-num system="onscreen">S29E01</episode-num></programme>
+</tv>

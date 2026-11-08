@@ -1,0 +1,3 @@
+# TV Guide channel: no workload of its own. ErsatzTV (argocd/apps/ersatztv) mounts these ConfigMaps and runs
+# files/render.py as a remote-stream script while someone watches channel 1. Edit files/, streams/ or fonts/.
+{}
