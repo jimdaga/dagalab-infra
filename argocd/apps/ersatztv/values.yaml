@@ -5,7 +5,7 @@
 # instead of streaming them through Jellyfin. Channels reach the TVs as Jellyfin Live TV (M3U tuner + XMLTV guide).
 # Media sources, channels and schedules live in its SQLite DB (Longhorn), set in the UI: README "Media stack plan" 9.
 # Quick Sync: requests one share of the node's Intel UHD 630 via the Intel GPU device plugin (FFmpeg profile: QSV).
-# Channel 1 "TV Guide": ErsatzTV runs /tv-guide/app/render.py (helm/charts/tv-guide) as a remote-stream script.
+# Channel 1 "TV Guide": the tv-guide sidecar renders it (helm/charts/tv-guide), ErsatzTV plays it as a remote stream.
 controllers:
   ersatztv:
     strategy: Recreate
@@ -53,6 +53,32 @@ controllers:
             gpu.intel.com/i915: 1
           limits:
             memory: 4Gi
+            gpu.intel.com/i915: 1
+      # TV Guide renderer (helm/charts/tv-guide/files/server.py): http://127.0.0.1:8410/guide.ts, used by channel 1's
+      # remote stream. Same image (its ffmpeg has QSV + libass); renders only while ErsatzTV is reading from it.
+      tv-guide:
+        image:
+          repository: ersatztv/legacy
+          tag: v26.12.0
+        command: [python3, /tv-guide/app/server.py]
+        env:
+          TZ: America/New_York
+        probes:
+          liveness: &guideprobe
+            enabled: true
+            custom: true
+            spec:
+              exec:   # it listens on 127.0.0.1 only, which a kubelet httpGet can't reach
+                command: [curl, -sf, -o, /dev/null, http://127.0.0.1:8410/health]
+              periodSeconds: 30
+          readiness: *guideprobe
+        resources:
+          requests:
+            cpu: 50m
+            memory: 64Mi
+            gpu.intel.com/i915: 1
+          limits:
+            memory: 1Gi
             gpu.intel.com/i915: 1
 
 service:
