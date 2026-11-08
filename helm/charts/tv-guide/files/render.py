@@ -5,7 +5,7 @@ Started by the tv-guide sidecar (server.py) once per 60-second item while someon
 ErsatzTV stops reading. Never fails before ffmpeg starts: no listings, no Jellyfin, no music file or a failed still
 still give a full-length stream.
 """
-import argparse, json, os, shutil, subprocess, sys, time, urllib.request
+import argparse, json, os, subprocess, sys, time, urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -19,6 +19,7 @@ FONTS = os.environ.get('TVG_FONTS_DIR', '/tv-guide/fonts')
 LOOKUP_BUDGET_S = 3        # clip/poster lookups per item; after that, remaining promos are posters/blank
 ITEM_S = 60                # ErsatzTV schedules the guide as 60-s items on minute boundaries
 SNAP_S = 10
+WORK_DIRS = 8              # renders reuse run-0..run-7 (by minute) and overwrite: nothing is ever deleted
 
 
 def anchor(now):
@@ -82,6 +83,18 @@ def plan(now, xmltv, library, cache_dir, seconds=60):
     return assets, stills, build
 
 
+def work_dir(cache, t):
+    """The render's work dir: one of WORK_DIRS, by the minute it stands for. Everything in it for a given minute is
+    the same whoever renders it, so concurrent viewers can share it, and files are replaced whole (os.replace)."""
+    return Path(cache) / f'run-{int(t.timestamp()) // ITEM_S % WORK_DIRS}'
+
+
+def _write(path, data):
+    tmp = path.with_name(f'.{path.name}.{os.getpid()}')
+    tmp.write_bytes(data)
+    os.replace(tmp, path)
+
+
 def _fetch_xmltv():
     try:
         with urllib.request.urlopen(XMLTV_URL, timeout=5) as r:
@@ -102,24 +115,21 @@ def main(argv=None):
     p = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     p.add_argument('--seconds', type=int, default=60)
     args = p.parse_args(argv)
-    # one work dir per run: two viewers (or an overlap between items) must not share files
-    CACHE.mkdir(parents=True, exist_ok=True)
-    for old in CACHE.glob('run-*'):
-        try:
-            if old.stat().st_mtime < time.time() - 600:
-                shutil.rmtree(old)
-        except OSError:
-            pass
-    work = CACHE / f'run-{os.getpid()}'
-    work.mkdir(exist_ok=True)
-    assets, stills, build = plan(anchor(datetime.now(timezone.utc)), _fetch_xmltv(), _library(), work, args.seconds)
+    now = anchor(datetime.now(timezone.utc))
+    work = work_dir(CACHE, now)
+    work.mkdir(parents=True, exist_ok=True)
+    assets, stills, build = plan(now, _fetch_xmltv(), _library(), work, args.seconds)
     for name, text in assets.items():
-        (work / name).write_text(text)
-    for still in stills:
+        _write(work / name, text.encode())
+    for still in stills:                     # render to a temp name, then swap it in whole
+        final = Path(still[-1])
+        tmp = final.with_name(f'.{final.stem}.{os.getpid()}.png')
         try:
-            subprocess.run(still, check=False, timeout=20, stdout=subprocess.DEVNULL)
+            subprocess.run(still[:-1] + [str(tmp)], check=False, timeout=20, stdout=subprocess.DEVNULL)
         except subprocess.TimeoutExpired:
             pass
+        if tmp.exists():
+            os.replace(tmp, final)
     cmd = build()
     os.execvp(cmd[0], cmd)
 

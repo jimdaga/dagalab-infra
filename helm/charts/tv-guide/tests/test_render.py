@@ -78,3 +78,19 @@ class BudgetTest(unittest.TestCase):
         self.assertEqual(g.path_for(None), ('/x.mkv', 10.0))
         self.assertIsNone(g.path_for(None))
         self.assertIsNone(g.poster_for(None))
+
+
+class WorkDirTest(unittest.TestCase):
+    """No deleting: renders reuse a fixed ring of work dirs, chosen by the minute they stand for."""
+    def test_ring_of_eight_by_minute(self):
+        base = pathlib.Path('/c')
+        t = datetime(2026, 11, 8, 16, 12, 0, tzinfo=EST)
+        dirs = {rd.work_dir(base, t + timedelta(minutes=m)) for m in range(100)}
+        self.assertEqual(len(dirs), rd.WORK_DIRS)
+        self.assertEqual(rd.work_dir(base, t), rd.work_dir(base, t + timedelta(seconds=37)))   # same minute, same dir
+        self.assertTrue(all(d.parent == base and d.name.startswith('run-') for d in dirs))
+
+    def test_main_has_no_deletion(self):
+        src = (HERE.parent / 'files' / 'render.py').read_text()
+        for word in ('rmtree', 'unlink', '.remove('):
+            self.assertNotIn(word, src)
