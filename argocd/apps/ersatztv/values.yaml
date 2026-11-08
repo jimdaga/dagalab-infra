@@ -5,6 +5,7 @@
 # instead of streaming them through Jellyfin. Channels reach the TVs as Jellyfin Live TV (M3U tuner + XMLTV guide).
 # Media sources, channels and schedules live in its SQLite DB (Longhorn), set in the UI: README "Media stack plan" 9.
 # Quick Sync: requests one share of the node's Intel UHD 630 via the Intel GPU device plugin (FFmpeg profile: QSV).
+# Channel 1 "TV Guide": ErsatzTV runs /tv-guide/app/render.py (helm/charts/tv-guide) as a remote-stream script.
 controllers:
   ersatztv:
     strategy: Recreate
@@ -81,4 +82,24 @@ persistence:
     existingClaim: media-data
     globalMounts:
       - path: /data
+        readOnly: true
+  # TV Guide channel (helm/charts/tv-guide): renderer code, the remote-stream definition (Local library "Remote Streams"
+  # scans /tv-guide/streams) and fonts. Not subPath mounts, so ConfigMap updates reach the pod without a restart.
+  tv-guide-app:
+    type: configMap
+    name: tv-guide-app
+    globalMounts:
+      - path: /tv-guide/app
+        readOnly: true
+  tv-guide-streams:
+    type: configMap
+    name: tv-guide-streams
+    globalMounts:
+      - path: /tv-guide/streams
+        readOnly: true
+  tv-guide-fonts:
+    type: configMap
+    name: tv-guide-fonts
+    globalMounts:
+      - path: /tv-guide/fonts
         readOnly: true
