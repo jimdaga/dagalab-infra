@@ -147,6 +147,14 @@ if not any(l.get('Path') == f'{ETV}/xmltv.xml' for l in lt.get('ListingProviders
     log(f'live tv guide ErsatzTV: {st} {r if st >= 300 else ""}')
 else:
     log('live tv guide ErsatzTV: present')
+# Live TV only for the household; Jellyfin turns it on for every new user (Wizarr invites included)
+LIVE_TV_USERS = {'jim', 'alicia'}
+st, users = call('GET', '/Users', token=T)
+for u in users:
+    p, want = u['Policy'], u['Name'] in LIVE_TV_USERS
+    if p.get('EnableLiveTvAccess') != want:
+        st, _ = call('POST', f'/Users/{u["Id"]}/Policy', {**p, 'EnableLiveTvAccess': want}, token=T)
+        log(f'live tv access {u["Name"]} -> {want}: {st}')
 
 # 6) API keys for other apps
 st, keys = call('GET', '/Auth/Keys', token=T)
