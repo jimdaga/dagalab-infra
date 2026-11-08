@@ -1,0 +1,82 @@
+# ErsatzTV (legacy edition: the one with the Jellyfin connector): live TV channels scheduled from the Jellyfin library.
+# LAN only: https://ersatztv.lab.internal. The UI has no login, so never route it via the public shared-gateway.
+# Jellyfin is the media source (Shows, Movies, Sports; API key "ersatztv" from scripts/jellyfin-setup.sh, entered once in
+# the UI). The library is mounted at the same /data path as in Jellyfin, so ErsatzTV plays files straight off the NAS
+# instead of streaming them through Jellyfin. Channels reach the TVs as Jellyfin Live TV (M3U tuner + XMLTV guide).
+# Media sources, channels and schedules live in its SQLite DB (Longhorn), set in the UI: README "Media stack plan" 9.
+# Quick Sync: requests one share of the node's Intel UHD 630 via the Intel GPU device plugin (FFmpeg profile: QSV).
+controllers:
+  ersatztv:
+    strategy: Recreate
+    pod:
+      securityContext:
+        # DSM user `media`: the NAS squashes root to guest, so root couldn't read the library
+        runAsUser: 1029
+        runAsGroup: 100
+        fsGroup: 100
+        fsGroupChangePolicy: OnRootMismatch
+        # host `render` (991) and `video` (44) groups own /dev/dri/*
+        supplementalGroups: [44, 991]
+    containers:
+      app:
+        image:
+          repository: ersatztv/legacy
+          tag: v26.12.0
+        env:
+          TZ: America/New_York
+          HOME: /config   # image default is /root, unwritable as UID 1029
+        probes:
+          liveness: &probe
+            enabled: true
+            custom: true
+            spec:
+              tcpSocket:
+                port: 8409
+              periodSeconds: 30
+              failureThreshold: 5
+          readiness: *probe
+          startup:
+            enabled: true
+            custom: true
+            spec:
+              tcpSocket:
+                port: 8409
+              periodSeconds: 10
+              failureThreshold: 30   # first start creates/migrates the DB
+        resources:
+          requests:
+            cpu: 500m
+            memory: 1Gi
+            gpu.intel.com/i915: 1
+          limits:
+            memory: 4Gi
+            gpu.intel.com/i915: 1
+
+service:
+  app:
+    controller: ersatztv
+    ports:
+      http:
+        port: 8409
+
+persistence:
+  # SQLite DB, artwork cache, logs: Longhorn, never NFS
+  config:
+    type: persistentVolumeClaim
+    accessMode: ReadWriteOnce
+    size: 10Gi
+    globalMounts:
+      - path: /config
+  # HLS segments of the channels being watched: node-local scratch
+  transcode:
+    type: emptyDir
+    sizeLimit: 20Gi
+    globalMounts:
+      - path: /transcode
+  # shared media share (helm/charts/media-storage), read-only, same path as Jellyfin's
+  data:
+    type: persistentVolumeClaim
+    existingClaim: media-data
+    globalMounts:
+      - path: /data
+        readOnly: true

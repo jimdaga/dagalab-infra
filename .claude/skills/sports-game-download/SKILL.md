@@ -5,8 +5,7 @@ description: Download full sports games (NFL first, any league) from YouTube ont
 
 # Download sports games to the NAS
 
-Games go on the video share (`/volume2/video`) under `sports/`, in a TV-show layout so ErsatzTV (planned, not deployed
-yet) and Jellyfin can scan it as a Shows library:
+Games go on the video share (`/volume2/video`) under `sports/`, in a TV-show layout so ErsatzTV and Jellyfin can scan it as a Shows library:
 
 ```
 sports/NFL Classic Games/tvshow.nfo
@@ -49,5 +48,6 @@ YouTube id, and copying. You decide the metadata.
   run as can read them. No chown needed.
 - Jellyfin has a **Sports** library on `/data/sports` (from `scripts/jellyfin-setup.py`, no online metadata). Its own scan
   runs every 12 hours (no inotify on NFS), so after a download refresh it: Dashboard > Libraries > Sports > Scan, or rerun `jellyfin-setup.sh`.
-- When ErsatzTV is deployed: mount `media-data` read-only and add a local **Shows** library on `/data/sports`.
+- ErsatzTV (`argocd/apps/ersatztv`) gets it through its Jellyfin media source (the Sports library), so after Jellyfin's
+  scan, sync it in ErsatzTV too (Media Sources > Jellyfin > libraries) before scheduling a new game.
 - Personal use only: download what the user asks for, and don't re-share it.

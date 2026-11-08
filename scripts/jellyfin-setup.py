@@ -16,7 +16,8 @@ AUTH = 'MediaBrowser Client="dagalab-setup", Device="cli", DeviceId="dagalab-set
 LIBS = [('Movies', 'movies', '/data/movies'), ('Shows', 'tvshows', '/data/tv'), ('Theme Parks', 'homevideos', '/data/theme-parks'),
         ('Sports', 'tvshows', '/data/sports'),   # games from scripts/sports-dl.py, metadata only from its .nfo files
         ('Theme Park Audio', 'music', '/data/theme-park-audio')]   # park background music albums
-KEY_APPS = ['homepage', 'seerr', 'arr', 'wizarr']   # arr: Sonarr/Radarr tell Jellyfin to refresh after imports; wizarr: creates invited users
+KEY_APPS = ['homepage', 'seerr', 'arr', 'wizarr', 'ersatztv']   # arr: Sonarr/Radarr tell Jellyfin to refresh after imports; wizarr: creates invited users
+# ersatztv: reads the library (its Jellyfin media source)
 
 def log(*a): print(*a, file=sys.stderr, flush=True)
 
@@ -130,7 +131,7 @@ log(f'library scan started: {st}')
 # 6) API keys for other apps
 st, keys = call('GET', '/Auth/Keys', token=T)
 items = {k['AppName']: k['AccessToken'] for k in keys.get('Items', [])}
-MANAGED = {'homepage', 'seerr', 'arr', 'wizarr'}   # keys this script has ever created; never touch keys other apps made (e.g. Seerr's own "Seerr")
+MANAGED = {'homepage', 'seerr', 'arr', 'wizarr', 'ersatztv'}   # keys this script has ever created; never touch keys other apps made (e.g. Seerr's own "Seerr")
 for app in [a for a in items if a in MANAGED and a not in KEY_APPS]:   # revoke our keys no app uses any more
     st, _ = call('DELETE', f'/Auth/Keys/{items.pop(app)}', token=T)
     log(f'api key {app}: no longer used, revoked ({st})')

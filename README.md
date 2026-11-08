@@ -222,6 +222,12 @@ Deploy order, so Jellyfin scans an already clean, ID-tagged library once:
    1. `jellyfin-setup.sh` and `audiobookshelf-setup.sh` issue its keys: Jellyfin API key `wizarr` (`secret/jellyfin` `wizarr-key`), Audiobookshelf admin user `wizarr` + key (`secret/audiobookshelf` `wizarr-key`; an admin can create users, not admins).
    2. `VAULT_TOKEN=... scripts/wizarr-setup.sh` **before** the public route exists: `/setup` lets anyone create the admin on a fresh server. Creates admin `jim` (Vault `secret/wizarr`), adds both servers (in-cluster URLs; invitees are sent to `popcorn`/`books.dagaflix.com`) and enables all their libraries. Narrow libraries per invite in the UI.
    3. UniFi DNS: `wizarr.lab.internal` → 192.168.3.201.
+10. **Live TV: ErsatzTV** (`argocd/apps/ersatztv`, legacy edition, LAN only `https://ersatztv.lab.internal`: the UI has no login, never put it on the shared gateway). Channels are scheduled from the Jellyfin library and watched as Jellyfin Live TV. The library is mounted at the same `/data` path as in Jellyfin, so playback reads the NAS directly (no path replacements); Quick Sync via one Intel GPU share. Media source, FFmpeg profile, channels and schedules live in its SQLite DB on Longhorn (UI-managed, not in git). One-time steps (repeat only after losing its volume):
+   1. `jellyfin-setup.sh` issues its Jellyfin API key `ersatztv` (`secret/jellyfin` `ersatztv-key`).
+   2. ErsatzTV UI: Media Sources → Jellyfin → address `http://jellyfin.media.svc.cluster.local:8096` + that key; Edit Libraries → sync Movies, Shows, Sports.
+   3. ErsatzTV UI: Settings → FFmpeg profile: hardware acceleration QSV, device `/dev/dri/renderD128`.
+   4. Jellyfin: Live TV → tuner M3U `http://ersatztv.media.svc.cluster.local:8409/iptv/channels.m3u`, guide XMLTV `http://ersatztv.media.svc.cluster.local:8409/iptv/xmltv.xml`. Live TV access only for the household users (Wizarr-invited friends: off).
+   5. UniFi DNS: `ersatztv.lab.internal` → 192.168.3.201.
 
 ## UPS / power
 

@@ -169,6 +169,13 @@ configMaps:
                 namespace: media
                 app: plex
                 siteMonitor: http://plex.media.svc.cluster.local:32400/identity
+            - ErsatzTV:
+                href: https://ersatztv.lab.internal
+                icon: ersatztv.png
+                description: Live TV channels (watch in Jellyfin Live TV)
+                namespace: media
+                app: ersatztv
+                siteMonitor: http://ersatztv.media.svc.cluster.local:8409/
             - Audiobookshelf:
                 href: https://books.lab.internal
                 icon: audiobookshelf.png
