@@ -23,6 +23,7 @@ spec:
       selfHeal: true
     syncOptions:
       - CreateNamespace=true
+      - ServerSideApply=true   # fonts ConfigMap is too big for client-side apply's last-applied annotation
     retry:
       limit: 5
       backoff:
