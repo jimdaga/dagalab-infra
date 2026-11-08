@@ -1,0 +1,6 @@
+# ErsatzTV remote stream (Local library "Remote Streams", path /tv-guide/streams): channel 1 plays this item back to
+# back. Each 60-s item runs the renderer afresh; it keeps scroll, promos and music continuous from wall-clock time.
+title: TV Guide
+script: python3 /tv-guide/app/render.py --seconds 60
+duration: "00:01:00"
+is_live: true

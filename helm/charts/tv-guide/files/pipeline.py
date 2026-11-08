@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from zoneinfo import ZoneInfo
 
 from media import clip_offset
+from screen import GRID_TOP, GRID_VISIBLE, SCROLL_PX_PER_S
 
 TZ = ZoneInfo('America/New_York')
 SEGMENT_S = 10
@@ -52,10 +53,19 @@ def segments_for(promos, library, now, seconds):
     return out
 
 
-def ffmpeg_cmd(segments, music, ass_path, fonts_dir, seconds):
+def still_cmd(ass_path, png_path, height, fonts_dir):
+    """One-frame render of an ASS document to a PNG (the frame and the grid strip)."""
+    return ['ffmpeg', '-hide_banner', '-loglevel', 'error', '-nostdin', '-y',
+            '-f', 'lavfi', '-i', f'color=c=black:s=1920x{height}:r=1',
+            '-vf', f'ass=filename={ass_path}:fontsdir={fonts_dir}', '-frames:v', '1', png_path]
+
+
+def ffmpeg_cmd(segments, music, frame_png, strip_png, overlay_ass, fonts_dir, seconds, scroll):
+    """scroll = (offset at t=0, cycle) of the grid strip, in pixels."""
     cmd = ['ffmpeg', '-hide_banner', '-loglevel', 'error', '-nostdin',
            '-init_hw_device', 'qsv=hw', '-filter_hw_device', 'hw',
-           '-f', 'lavfi', '-i', f'color=c=0x06106B:s=1920x1080:r={FPS}']
+           '-loop', '1', '-framerate', str(FPS), '-i', frame_png,
+           '-loop', '1', '-framerate', str(FPS), '-i', strip_png]
     for s in segments:
         if s.kind == 'clip':
             cmd += ['-ss', f'{s.offset:.1f}', '-t', str(SEGMENT_S), '-i', s.path]
@@ -63,16 +73,21 @@ def ffmpeg_cmd(segments, music, ass_path, fonts_dir, seconds):
             cmd += ['-loop', '1', '-framerate', str(FPS), '-t', str(SEGMENT_S), '-i', s.path]
         else:
             cmd += ['-f', 'lavfi', '-t', str(SEGMENT_S), '-i', f'color=c=black:s=1280x540:r={FPS}']
-    music_idx = len(segments) + 1
+    first = 2
+    music_idx = first + len(segments)
     cmd += ['-stream_loop', '-1', '-ss', f'{music[1]:.1f}', '-i', music[0]]
-    chains = [f'[{i + 1}:v:0]scale=1280:540:force_original_aspect_ratio=decrease,pad=1280:540:-1:-1:color=black,'
+    chains = [f'[{first + i}:v:0]scale=1280:540:force_original_aspect_ratio=decrease,pad=1280:540:-1:-1:color=black,'
               f'setsar=1,fps={FPS},format=yuv420p,tpad=stop_mode=clone:stop_duration={SEGMENT_S},'
               f'trim=duration={SEGMENT_S},setpts=PTS-STARTPTS[s{i}]' for i in range(len(segments))]
     joined = ''.join(f'[s{i}]' for i in range(len(segments)))
+    offset, cycle = scroll
     graph = ';'.join(chains + [
         f'{joined}concat=n={len(segments)}:v=1:a=0[promo]',
-        '[0:v][promo]overlay=0:0:eof_action=pass,format=yuv420p[bg]',
-        f'[bg]ass=filename={ass_path}:fontsdir={fonts_dir},format=nv12,hwupload=extra_hw_frames=64[v]'])
+        f"[1:v]crop=1920:{GRID_VISIBLE}:0:'mod({offset}+{SCROLL_PX_PER_S}*t,{cycle})'[grid]",
+        '[0:v]format=yuv420p[frame]',
+        '[frame][promo]overlay=0:0:eof_action=pass[a]',
+        f'[a][grid]overlay=0:{GRID_TOP}[b]',
+        f'[b]ass=filename={overlay_ass}:fontsdir={fonts_dir},format=nv12,hwupload=extra_hw_frames=64[v]'])
     cmd += ['-filter_complex', graph, '-map', '[v]', '-map', f'{music_idx}:a:0', '-t', str(seconds),
             '-c:v', 'h264_qsv', '-b:v', '8M', '-maxrate', '8M', '-bufsize', '16M', '-g', '60',
             '-c:a', 'aac', '-b:a', '192k', '-ar', '48000', '-ac', '2', '-f', 'mpegts', 'pipe:1']

@@ -1,0 +1,27 @@
+# Mounted read-only into the ErsatzTV pod (argocd/apps/ersatztv/values.yaml): files/ -> /tv-guide/app,
+# streams/ -> /tv-guide/streams (ErsatzTV scans it as a Remote Streams library), fonts/ -> /tv-guide/fonts.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: tv-guide-app
+data:
+{{ (.Files.Glob "files/*.py").AsConfig | indent 2 }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: tv-guide-streams
+data:
+{{ (.Files.Glob "streams/*.yml").AsConfig | indent 2 }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: tv-guide-fonts
+binaryData:
+{{- range $path, $_ := .Files.Glob "fonts/*.ttf" }}
+  {{ base $path }}: {{ $.Files.Get $path | b64enc }}
+{{- end }}
+data:
+  OFL.txt: |
+{{ .Files.Get "fonts/OFL.txt" | indent 4 }}

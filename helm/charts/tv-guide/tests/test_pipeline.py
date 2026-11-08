@@ -51,19 +51,30 @@ class PipelineTest(unittest.TestCase):
 
     def test_cmd_core(self):
         segs = [pl.Segment('clip', '/data/tv/a.mkv', 300.0), pl.Segment('image', '/c/p.jpg', 0.0), pl.Segment('blank', None, 0.0)]
-        cmd = pl.ffmpeg_cmd(segs, ('/data/m.mp3', 12.5), '/c/screen.ass', '/tv-guide/fonts', 60)
+        cmd = pl.ffmpeg_cmd(segs, ('/data/m.mp3', 12.5), '/c/frame.png', '/c/strip.png', '/c/overlay.ass',
+                            '/tv-guide/fonts', 60, (12.0, 216))
         s = ' '.join(cmd)
         for want in ('-init_hw_device qsv=hw', '-c:v h264_qsv', '-t 60', '-f mpegts', 'pipe:1'):
             self.assertIn(want, s)
+        inputs = args_after(cmd, '-i')
+        self.assertEqual(inputs[:2], ['/c/frame.png', '/c/strip.png'])
         fc = cmd[cmd.index('-filter_complex') + 1]
-        self.assertIn('ass=filename=/c/screen.ass:fontsdir=/tv-guide/fonts', fc)
+        self.assertIn("[1:v]crop=1920:486:0:'mod(12.0+40*t,216)'", fc)        # grid scrolls by cropping the strip
+        self.assertIn('overlay=0:594', fc)
+        self.assertIn('ass=filename=/c/overlay.ass:fontsdir=/tv-guide/fonts', fc)
         self.assertIn('concat=n=3:v=1:a=0', fc)
         self.assertIn('-ss 300.0 -t 10 -i /data/tv/a.mkv', s)
         self.assertIn('-loop 1 -framerate 30 -t 10 -i /c/p.jpg', s)
         self.assertIn('-stream_loop -1 -ss 12.5 -i /data/m.mp3', s)
-        self.assertEqual(sum(1 for a in cmd if a == '-f' ) , 1 + 1 + 1)   # base colour, blank colour, mpegts
-        inputs = args_after(cmd, '-i')
         self.assertEqual(args_after(cmd, '-map'), ['[v]', f'{inputs.index("/data/m.mp3")}:a:0'])  # never the clips' audio
+
+    def test_still_cmd(self):
+        cmd = pl.still_cmd('/c/strip.ass', '/c/strip.png', 648, '/tv-guide/fonts')
+        s = ' '.join(cmd)
+        self.assertIn('color=c=black:s=1920x648', s)
+        self.assertIn('ass=filename=/c/strip.ass:fontsdir=/tv-guide/fonts', s)
+        self.assertIn('-frames:v 1', s)
+        self.assertEqual(cmd[-1], '/c/strip.png')
 
     def test_segments_clip(self):
         with tempfile.NamedTemporaryFile() as f:
