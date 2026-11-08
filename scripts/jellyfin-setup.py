@@ -128,6 +128,26 @@ for f in folders:
 st, _ = call('POST', '/Library/Refresh', token=T)
 log(f'library scan started: {st}')
 
+# 5b) Live TV: ErsatzTV channels (M3U tuner + XMLTV guide, in-cluster); other tuners (added in the UI) are left alone
+ETV = 'http://ersatztv.media.svc.cluster.local:8409/iptv'
+st, lt = call('GET', '/System/Configuration/livetv', token=T)
+if not any(t.get('Url') == f'{ETV}/channels.m3u' for t in lt.get('TunerHosts', [])):
+    st, r = call('POST', '/LiveTv/TunerHosts', {'Type': 'm3u', 'Url': f'{ETV}/channels.m3u', 'FriendlyName': 'ErsatzTV',
+                                                 'ImportFavoritesOnly': False, 'AllowHWTranscoding': True,
+                                                 'AllowStreamSharing': True, 'EnableStreamLooping': False,
+                                                 'IgnoreDts': True, 'TunerCount': 0}, token=T)
+    log(f'live tv tuner ErsatzTV: {st} {r if st >= 300 else ""}')
+else:
+    log('live tv tuner ErsatzTV: present')
+if not any(l.get('Path') == f'{ETV}/xmltv.xml' for l in lt.get('ListingProviders', [])):
+    st, r = call('POST', '/LiveTv/ListingProviders?validateListings=false&validateLogin=false',
+                 {'Type': 'xmltv', 'Path': f'{ETV}/xmltv.xml', 'EnableAllTuners': False,
+                  'EnabledTuners': [t['Id'] for t in call('GET', '/System/Configuration/livetv', token=T)[1]['TunerHosts']
+                                    if t.get('Url') == f'{ETV}/channels.m3u']}, token=T)
+    log(f'live tv guide ErsatzTV: {st} {r if st >= 300 else ""}')
+else:
+    log('live tv guide ErsatzTV: present')
+
 # 6) API keys for other apps
 st, keys = call('GET', '/Auth/Keys', token=T)
 items = {k['AppName']: k['AccessToken'] for k in keys.get('Items', [])}
