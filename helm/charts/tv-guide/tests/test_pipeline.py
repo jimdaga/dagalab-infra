@@ -65,6 +65,8 @@ class PipelineTest(unittest.TestCase):
         fc = cmd[cmd.index('-filter_complex') + 1]
         self.assertIn("[1:v]crop=1920:486:0:'mod(12.0+40*t,216)'", fc)        # grid scrolls by cropping the strip
         self.assertIn('overlay=0:594', fc)
+        self.assertIn('scale=960:540:', fc)                        # promo box inside the 4:3 centre
+        self.assertIn('[frame][promo]overlay=240:0', fc)
         self.assertIn('ass=filename=/c/overlay.ass:fontsdir=/tv-guide/fonts', fc)
         self.assertIn('concat=n=3:v=1:a=0', fc)
         self.assertIn('-ss 300.0 -t 10 -i /data/tv/a.mkv', s)

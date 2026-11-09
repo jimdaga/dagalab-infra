@@ -1,4 +1,4 @@
-import importlib.util, pathlib, sys, unittest
+import importlib.util, pathlib, re, sys, unittest
 from datetime import datetime, timedelta, timezone
 
 HERE = pathlib.Path(__file__).resolve().parent
@@ -31,8 +31,57 @@ class FrameTest(unittest.TestCase):
     def test_header_and_size(self):
         ass = sc.frame_ass(ls.window(NOW))
         for s in ('PlayResX: 1920', 'PlayResY: 1080', 'Barlow Condensed', 'DAGAFLIX', 'TV GUIDE', 'SUN NOV 8',
-                  '3:30 PM', '4:00 PM', '4:30 PM'):
+                  '3:30 PM', '4:00 PM'):
             self.assertIn(s, ass)
+        self.assertNotIn('4:30 PM', ass)
+
+
+POS = re.compile(r'\\an(\d)\\pos\((\d+),(\d+)\)\\fs(\d+)[^}]*}(.*)$')
+
+
+def texts(ass):
+    """(alignment, x, size, text) of every text event (boxes have no \\fs)."""
+    out = []
+    for line in ass.splitlines():
+        m = line.startswith('Dialogue:') and POS.search(line)
+        if m:
+            out.append((int(m[1]), int(m[2]), int(m[4]), re.sub(r'{[^}]*}', '', m[5])))
+    return out
+
+
+class CenterCutTest(unittest.TestCase):
+    """All text sits in the middle 4:3 (1440 px) so a CRT that zooms 16:9 to fill the screen loses only decoration."""
+    CHAR_W = 0.5                         # Barlow Condensed Bold, generous average advance per em
+
+    def assertInside(self, ass):
+        lo, hi = sc.SAFE_X, sc.SAFE_X + sc.SAFE_W
+        for an, x, size, text in texts(ass):
+            w = len(text) * size * self.CHAR_W
+            left = {7: x, 4: x, 1: x, 5: x - w / 2, 8: x - w / 2, 2: x - w / 2}.get(an, x - w)
+            self.assertGreaterEqual(left, lo, text)
+            self.assertLessEqual(left + w, hi, text)
+
+    def test_safe_area_is_4_3(self):
+        self.assertEqual(sc.SAFE_W * 3, sc.H * 4)
+        self.assertEqual(sc.SAFE_X * 2 + sc.SAFE_W, sc.W)
+
+    def test_frame(self):
+        self.assertInside(sc.frame_ass(ls.window(NOW)))
+
+    def test_strip(self):
+        long = ls.Row(80, 'Throwback Theater', [ls.Block('A' * 80, 'B' * 80, 0.0, 0.5), ls.Block('C' * 80, None, 0.5, 1.0)])
+        self.assertInside(sc.strip_ass(ls.rows(PROGS, NOW) + [long])[0])
+        self.assertInside(sc.strip_ass([], error='X' * 80)[0])
+
+    def test_overlay(self):
+        p = ls.Programme(80, 'Throwback Theater', 'T' * 80, 'D' * 80, NOW, NOW + timedelta(hours=2), None, None, None)
+        self.assertInside(sc.overlay_ass([ls.Promo('NEXT', p)], NOW, 10))
+
+    def test_last_column_and_tab_bleed_to_edges(self):
+        ass, _, _ = sc.strip_ass([ls.Row(25, 'Christmas', [ls.Block('Elf', None, 0.0, 1.0)])])
+        boxes = re.findall(r'\\pos\((\d+),\d+\).*?\\p1}m 0 0 l (\d+) ', ass)
+        self.assertIn(('0', str(sc.SAFE_X + sc.TAB_W - 3)), boxes)                  # channel tab from the left edge
+        self.assertTrue(any(int(x) + int(w) == sc.W for x, w in boxes), boxes)       # last block to the right edge
 
 
 class StripTest(unittest.TestCase):
@@ -48,7 +97,7 @@ class StripTest(unittest.TestCase):
 
     def test_rows_text(self):
         ass, _, _ = sc.strip_ass(ls.rows(PROGS, NOW))
-        for s in ('CHRISTMAS', '90S REWIND', 'Bad Santa 2', '2016', 'The Simpsons', 'Simpsons Roast…'):   # 230-px block: ellipsized
+        for s in ('CHRISTMAS', '90S REWIND', 'Bad Santa 2', '2016', 'The Sim…', 'Simpsons…', 'South Park'):   # 244-px block: ellipsized
             self.assertIn(s, ass)
 
     def test_narrow_block_has_no_text(self):

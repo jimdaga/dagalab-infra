@@ -1,10 +1,10 @@
-"""ErsatzTV XMLTV -> programmes, the grid's rows (90-minute window) and the promo rotation (NOW / NEXT per channel)."""
+"""ErsatzTV XMLTV -> programmes, the grid's rows (60-minute window) and the promo rotation (NOW / NEXT per channel)."""
 import re
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
-WINDOW = timedelta(minutes=90)
+WINDOW = timedelta(minutes=60)
 GUIDE_CHANNELS = frozenset({1})   # the guide never lists itself
 
 

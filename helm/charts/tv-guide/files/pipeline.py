@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from zoneinfo import ZoneInfo
 
 from media import clip_offset
-from screen import GRID_TOP, GRID_VISIBLE, SCROLL_PX_PER_S
+from screen import GRID_TOP, GRID_VISIBLE, PROMO_W, SAFE_X, SCROLL_PX_PER_S, TOP_H
 
 TZ = ZoneInfo('America/New_York')
 SEGMENT_S = 10
@@ -76,14 +76,14 @@ def ffmpeg_cmd(segments, music, frame_png, strip_png, overlay_ass, fonts_dir, se
         elif s.kind == 'image':
             cmd += ['-loop', '1', '-framerate', str(FPS), '-t', str(SEGMENT_S), '-i', s.path]
         else:
-            cmd += ['-f', 'lavfi', '-t', str(SEGMENT_S), '-i', f'color=c=black:s=1280x540:r={FPS}']
+            cmd += ['-f', 'lavfi', '-t', str(SEGMENT_S), '-i', f'color=c=black:s={PROMO_W}x{TOP_H}:r={FPS}']
     first = 2
     music_idx = first + len(segments)
     if os.access(music[0], os.R_OK):
         cmd += ['-stream_loop', '-1', '-ss', f'{music[1]:.1f}', '-i', music[0]]
     else:                                                  # music renamed/moved: silence, not a dead channel
         cmd += ['-f', 'lavfi', '-i', 'anullsrc=channel_layout=stereo:sample_rate=48000']
-    chains = [f'[{first + i}:v:0]scale=1280:540:force_original_aspect_ratio=decrease,pad=1280:540:-1:-1:color=black,'
+    chains = [f'[{first + i}:v:0]scale={PROMO_W}:{TOP_H}:force_original_aspect_ratio=decrease,pad={PROMO_W}:{TOP_H}:-1:-1:color=black,'
               f'setsar=1,fps={FPS},format=yuv420p,tpad=stop_mode=clone:stop_duration={SEGMENT_S},'
               f'trim=duration={SEGMENT_S},setpts=PTS-STARTPTS[s{i}]' for i in range(len(segments))]
     joined = ''.join(f'[s{i}]' for i in range(len(segments)))
@@ -91,7 +91,7 @@ def ffmpeg_cmd(segments, music, frame_png, strip_png, overlay_ass, fonts_dir, se
         f'{joined}concat=n={len(segments)}:v=1:a=0[promo]',
         f"[1:v]crop=1920:{GRID_VISIBLE}:0:'mod({offset}+{SCROLL_PX_PER_S}*t,{cycle})'[grid]",
         '[0:v]format=yuv420p[frame]',
-        '[frame][promo]overlay=0:0:eof_action=pass[a]',
+        f'[frame][promo]overlay={SAFE_X}:0:eof_action=pass[a]',
         f'[a][grid]overlay=0:{GRID_TOP}[b]',
         f'[b]ass=filename={overlay_ass}:fontsdir={fonts_dir},format=nv12,hwupload=extra_hw_frames=64[v]'])
     cmd += ['-filter_complex', graph, '-map', '[v]', '-map', f'{music_idx}:a:0', '-t', str(seconds),

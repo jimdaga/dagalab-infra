@@ -28,8 +28,8 @@ class ListingsTest(unittest.TestCase):
         self.assertEqual((simp.channel_name, simp.detail, simp.episode, simp.year), ('90s Rewind', 'Simpsons Roasting on an Open Fire', 'S01E01', None))
 
     def test_window_floors_to_half_hour(self):
-        self.assertEqual(ls.window(at(15, 44)), (at(15, 30), at(17, 0)))
-        self.assertEqual(ls.window(at(16, 0)), (at(16, 0), at(17, 30)))
+        self.assertEqual(ls.window(at(15, 44)), (at(15, 30), at(16, 30)))   # 60 min: two half-hour columns
+        self.assertEqual(ls.window(at(16, 0)), (at(16, 0), at(17, 0)))
 
     def test_rows_exclude_guide_and_sort(self):
         self.assertEqual([r.channel for r in ls.rows(self.progs, at(15, 44))], [25, 90])
@@ -38,11 +38,11 @@ class ListingsTest(unittest.TestCase):
     def test_blocks_clipped_to_window(self):
         r25, r90 = ls.rows(self.progs, at(15, 44))
         self.assertEqual([b.title for b in r25.blocks], ['Home Alone 3', 'Bad Santa 2'])   # Elf (17:10) is outside
-        self.assertEqual((r25.blocks[0].x0, round(r25.blocks[0].x1, 4)), (0.0, round(3 / 90, 4)))
+        self.assertEqual((r25.blocks[0].x0, round(r25.blocks[0].x1, 4)), (0.0, round(3 / 60, 4)))
         self.assertEqual(r25.blocks[1].x1, 1.0)
         self.assertEqual([b.title for b in r90.blocks], ['The Simpsons', 'South Park'])
-        self.assertEqual(round(r90.blocks[0].x1, 4), round(14 / 90, 4))
-        self.assertEqual(round(r90.blocks[1].x0, 4), round(20 / 90, 4))          # gap 15:44-15:50 stays empty
+        self.assertEqual(round(r90.blocks[0].x1, 4), round(14 / 60, 4))
+        self.assertEqual(round(r90.blocks[1].x0, 4), round(20 / 60, 4))          # gap 15:44-15:50 stays empty
 
     def test_promos_now_then_next(self):
         got = [(p.programme.channel, p.kind, p.programme.title) for p in ls.promos(self.progs, at(15, 40))]

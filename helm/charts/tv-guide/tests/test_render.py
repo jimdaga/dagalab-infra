@@ -25,7 +25,7 @@ class RenderTest(unittest.TestCase):
         self.assertIn('LISTINGS UNAVAILABLE', assets['strip.ass'])
         self.assertEqual(sorted(assets), ['frame.ass', 'overlay.ass', 'strip.ass'])
         self.assertEqual([c[-1] for c in stills], ['/c/frame.png', '/c/strip.png'])
-        self.assertEqual(argv.count('color=c=black:s=1280x540:r=30'), 6)
+        self.assertEqual(argv.count('color=c=black:s=960x540:r=30'), 6)
         self.assertEqual(argv[argv.index('-t', argv.index('-filter_complex')) + 1], '60')
 
     def test_plan_bad_xml(self):
@@ -37,7 +37,7 @@ class RenderTest(unittest.TestCase):
         argv = build()
         self.assertIn('NOW ON', assets['overlay.ass'])
         self.assertNotIn('LISTINGS UNAVAILABLE', assets['strip.ass'])
-        self.assertEqual(argv.count('color=c=black:s=1280x540:r=30'), 6)   # library errors -> blank promos
+        self.assertEqual(argv.count('color=c=black:s=960x540:r=30'), 6)   # library errors -> blank promos
 
 
 if __name__ == '__main__':
