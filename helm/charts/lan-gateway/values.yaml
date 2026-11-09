@@ -25,7 +25,8 @@ routes:
   # http: true also serves plain http://<host> (no redirect): TV apps can't install the homelab CA.
   # requestTimeout: whole-response limit (Envoy default 15s); "0s" = none, for direct-play video (see shared-gateway values).
   - { host: jellyfin, namespace: media,           service: jellyfin,                      port: 8096, http: true, requestTimeout: 0s }
-  - { host: ersatztv, namespace: media,          service: ersatztv,                      port: 8409 }   # no login: LAN only, never public
+  # /iptv/ over plain http for TV apps (M3U, XMLTV, streams; ErsatzTV writes the request's scheme into the playlist)
+  - { host: ersatztv, namespace: media,          service: ersatztv,                      port: 8409, httpPaths: [/iptv/], requestTimeout: 0s }   # no login: LAN only, never public
   - { host: plex,     namespace: media,           service: plex,                          port: 32400, monitorPath: /identity }   # / is 401 without a token
   - { host: seerr,    namespace: media,           service: seerr,                         port: 5055 }
   - { host: books,    namespace: media,           service: audiobookshelf,                port: 80 }

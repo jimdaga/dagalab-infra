@@ -71,6 +71,10 @@ spec:
       backendRefs:
         - name: {{ .service }}
           port: {{ .port }}
+      {{- with .requestTimeout }}
+      timeouts:
+        request: {{ . | quote }}
+      {{- end }}
     - filters:
         - type: RequestRedirect
           requestRedirect:
